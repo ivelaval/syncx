@@ -1,0 +1,87 @@
+{
+  "groups": [
+    {
+      "name": "Frontend",
+      "projects": [
+        {
+          "name": "main-app",
+          "url": "gitlab.com:olive/frontend/main-app.git"
+        },
+        {
+          "name": "admin-dashboard",
+          "url": "gitlab.com:olive/frontend/admin-dashboard.git"
+        },
+        {
+          "name": "mobile-app",
+          "url": "gitlab.com:olive/frontend/mobile-app.git"
+        }
+      ]
+    },
+    {
+      "name": "Backend",
+      "projects": [
+        {
+          "name": "api-server",
+          "url": "gitlab.com:olive/backend/api-server.git"
+        },
+        {
+          "name": "auth-service",
+          "url": "gitlab.com:olive/backend/auth-service.git"
+        },
+        {
+          "name": "notification-service",
+          "url": "gitlab.com:olive/backend/notification-service.git"
+        }
+      ],
+      "groups": [
+        {
+          "name": "Microservices",
+          "projects": [
+            {
+              "name": "user-service",
+              "url": "gitlab.com:olive/backend/microservices/user-service.git"
+            },
+            {
+              "name": "order-service",
+              "url": "gitlab.com:olive/backend/microservices/order-service.git"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "DevOps",
+      "skip": false,
+      "projects": [
+        {
+          "name": "docker-configs",
+          "url": "gitlab.com:olive/devops/docker-configs.git"
+        },
+        {
+          "name": "kubernetes-manifests",
+          "url": "gitlab.com:olive/devops/k8s-manifests.git"
+        }
+      ]
+    },
+    {
+      "name": "Tools",
+      "skip": true,
+      "projects": [
+        {
+          "name": "internal-tools",
+          "url": "gitlab.com:olive/tools/internal-tools.git"
+        }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "documentation",
+      "url": "gitlab.com:olive/documentation.git"
+    },
+    {
+      "name": "shared-configs",
+      "url": "gitlab.com:olive/shared-configs.git"
+    }
+  ]
+}
