@@ -1,18 +1,48 @@
-# 🫒 Olive Clone Assistant v2.0
+# SyncX - Repository Synchronization Assistant
 
-A modern, intelligent repository cloning tool built specifically for Olive.com projects with smart tracking and automatic directory management.
+A modern, intelligent repository synchronization tool for managing multiple Git projects with smart tracking and automatic directory management.
 
 ## 🚀 Quick Start
 
+### Installation
+
 ```bash
-# Build the application
-go build -o olive-clone main.go
+# Clone the repository
+git clone <repository-url>
+cd syncx
 
-# Clone all repositories with smart tracking
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar
+# Install globally using make
+make install
 
-# Interactive setup (recommended for first-time users)
-./olive-clone wizard --file ../projects-inventory.json
+# Or use the install script directly
+./scripts/install.sh
+```
+
+After installation, the `syncx` command will be available globally:
+```bash
+syncx --help
+syncx clone --file projects-inventory.json --protocol ssh -o ~/repos
+syncx pull --file projects-inventory.json -o ~/repos
+```
+
+### Manual Installation
+
+```bash
+# Build the binary
+go build -o syncx main.go
+
+# Copy to your PATH (choose one)
+sudo cp syncx /usr/local/bin/
+# OR
+cp syncx ~/bin/  # Make sure ~/bin is in your PATH
+```
+
+### Uninstall
+
+```bash
+make uninstall
+# OR
+./scripts/uninstall.sh
 ```
 
 ## 📋 Commands Overview
@@ -24,7 +54,6 @@ go build -o olive-clone main.go
 | `pull` | Update existing projects only | Quick updates without new clones |
 | `check` | Check for uncommitted local changes | Pre-sync validation, change detection |
 | `scan` | Recursively scan directory for git repos | No inventory needed, workspace scanning |
-| `wizard` | Interactive guided setup | First-time users, complex configurations |
 | `list` | Show projects and groups | Discovery, validation |
 | `status` | Check repository status | Monitoring, troubleshooting |
 
@@ -36,111 +65,128 @@ go build -o olive-clone main.go
 | Smart tracking | ✅ | ✅ |
 | Group filtering | ✅ | ✅ |
 | Parallel processing | ✅ | ✅ |
-| Interactive mode | ✅ | ✅ |
 
 ### Advanced Usage Tips
 | Scenario | Recommended Command |
 |----------|-------------------|
 | **Clone only new projects** | Use fresh output directory: `-o /new/path` |
-| **Clone specific new project** | Filter by group: `--group "NewGroupName"` |
+| **Clone specific project group** | Filter by group: `--group "GroupName"` |
 | **Preview before action** | Add `--dry-run -v` to any command |
-| **Initial environment setup** | `wizard` or `clone` to fresh directory |
+| **Initial environment setup** | `clone` to fresh directory |
 | **Daily sync workflow** | `clone` (handles both new and updates) |
 | **Update only existing** | `pull` (safe for preserving local changes) |
 
-## 🚀 Quick One-Line Commands (Most Used)
+## 🚀 Quick One-Line Commands
 
 ### Clone & Update Everything (Smart Mode)
 ```bash
 # Clone new projects + update existing ones (recommended)
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar
+syncx clone --file projects-inventory.json --protocol ssh -o ~/repos
 
 # Same but with verbose output
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar -v
+syncx clone --file projects-inventory.json --protocol ssh -o ~/repos -v
 
 # Preview what will happen (dry run)
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar --dry-run -v
+syncx clone --file projects-inventory.json --protocol ssh -o ~/repos --dry-run -v
 ```
 
 ### Clone Only New Projects (Skip Updates)
 ```bash
-# Method 1: Use dry-run to preview, then manually select
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar --dry-run -v
-# Review output and run again without --dry-run if needed
+# Method 1: Clone to a fresh directory (guarantees only new clones)
+syncx clone --file projects-inventory.json --protocol ssh -o ~/repos-new
 
-# Method 2: Clone to a fresh directory (guarantees only new clones)
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar-new
+# Method 2: Filter by specific new groups
+syncx clone --file projects-inventory.json --protocol ssh -o ~/repos --group "NewGroup"
 
-# Method 3: Filter by specific new groups 
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar --group "NewGroup"
+# Method 3: Use dry-run to preview, then manually select
+syncx clone --file projects-inventory.json --protocol ssh -o ~/repos --dry-run -v
 ```
 
 ### Update Only Existing Projects
 ```bash
 # Update existing projects only (no new clones)
-./olive-clone pull --file ../projects-inventory.json -o /Users/vennet/Olive.com/uproarcar
+syncx pull --file projects-inventory.json -o ~/repos
 
 # Update with verbose output
-./olive-clone pull --file ../projects-inventory.json -o /Users/vennet/Olive.com/uproarcar -v
+syncx pull --file projects-inventory.json -o ~/repos -v
 ```
 
 ### Target Specific Groups
 ```bash
 # Clone/update specific group
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar --group "Tools/Sales"
+syncx clone --file projects-inventory.json --protocol ssh -o ~/repos --group "Frontend"
 
-# Clone only new projects in specific group (use fresh directory)
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar-new --group "Team Ludus/Libraries"
+# Update only specific group
+syncx pull --file projects-inventory.json -o ~/repos --group "Backend"
 
-# Update only existing projects in specific group
-./olive-clone pull --file ../projects-inventory.json -o /Users/vennet/Olive.com/uproarcar --group "Analytics"
+# Clone specific group to fresh location (new projects only)
+syncx clone --file projects-inventory.json --protocol ssh -o ~/repos-frontend --group "Frontend"
 ```
 
-## 🧙‍♂️ Interactive & Discovery Commands
+## 📋 Exploration & Discovery Commands
 
-### Wizard (Guided Setup)
-```bash
-# Interactive wizard (best for first-time users)
-./olive-clone wizard --file ../projects-inventory.json
-
-# Wizard with specific output directory
-./olive-clone wizard --file ../projects-inventory.json -o /custom/path
-```
-
-### Exploration & Discovery
+### Project Discovery
 ```bash
 # List all projects and groups
-./olive-clone list --file ../projects-inventory.json --verbose
+syncx list --file projects-inventory.json --verbose
 
 # Show only available groups
-./olive-clone clone --file ../projects-inventory.json --show-groups
-
-# Show groups for any command
-./olive-clone pull --file ../projects-inventory.json --show-groups
-
-# Check for uncommitted changes in all repositories (requires inventory)
-./syncx check --file ../projects-inventory.json -o /Users/vennet/Olive.com/uproarcar
-
-# Check for changes with verbose output
-./syncx check --file ../projects-inventory.json -o /Users/vennet/Olive.com/uproarcar -v
-
-# Scan directory recursively for git repos with changes (NO inventory needed!)
-./syncx scan /Users/vennet/Olive.com/uproarcar
-./syncx scan ~/workspace -v
-./syncx scan . -d 3 --show-clean
-
-# Check different clone locations (useful for multiple clones)
-./syncx check --file ../projects-inventory.json -o ~/production-repos
-./syncx check --file ../projects-inventory.json -o ~/development-repos
-./syncx check --file ../projects-inventory.json -o ~/workspace/olive
-
-# Scan multiple locations quickly
-./syncx scan ~/production-repos -d 3
-./syncx scan ~/development-repos -d 3
-./syncx scan ~/workspace/olive -d 4
+syncx clone --file projects-inventory.json --show-groups
 
 # Check status of existing repositories
-./olive-clone status --output /Users/vennet/Olive.com/uproarcar --verbose
+syncx status --output ~/repos --verbose
+```
+
+### Check for Uncommitted Changes
+
+#### With Inventory File
+```bash
+# Check all repositories for uncommitted changes
+syncx check --file projects-inventory.json -o ~/repos
+
+# Check with verbose output to see clean repositories too
+syncx check --file projects-inventory.json -o ~/repos -v
+
+# Check specific group for uncommitted changes
+syncx check --file projects-inventory.json -o ~/repos --group "Backend"
+
+# Check with parallel processing for faster results
+syncx check --file projects-inventory.json -o ~/repos --parallel 20
+```
+
+#### Scan Without Inventory (Fast Discovery)
+```bash
+# Scan current directory for git repositories with changes
+syncx scan .
+
+# Scan specific directory
+syncx scan ~/repos
+
+# Scan with verbose output (shows full paths)
+syncx scan ~/workspace -v
+
+# Scan with limited depth (faster for large directories)
+syncx scan ~/projects -d 3
+
+# Scan and show clean repositories too
+syncx scan . --show-clean
+
+# Scan home directory for all git repos with changes
+syncx scan ~ -d 5
+
+# Scan with more parallel processing for speed
+syncx scan ~/projects --parallel 20 -d 4
+
+# Scan multiple locations
+syncx scan ~/production-repos
+syncx scan ~/dev-repos
+syncx scan ~/workspace
+
+# Quick scan of common locations
+for dir in ~/workspace ~/projects ~/Documents; do
+  echo "Scanning $dir..."
+  syncx scan "$dir" -d 3
+done
 ```
 
 ## ⚙️ Advanced Configuration Commands
@@ -148,28 +194,19 @@ go build -o olive-clone main.go
 ### Protocol Options
 ```bash
 # Use SSH (default, recommended)
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /path
+syncx clone --file projects-inventory.json --protocol ssh -o ~/repos
 
 # Use HTTPS (for environments without SSH keys)
-./olive-clone clone --file ../projects-inventory.json --protocol http -o /path
+syncx clone --file projects-inventory.json --protocol http -o ~/repos
 ```
 
 ### Parallel Processing
 ```bash
 # Process multiple repositories in parallel (faster)
-./olive-clone clone --file ../projects-inventory.json -o /path --parallel 5
+syncx clone --file projects-inventory.json -o ~/repos --parallel 5
 
 # Pull with parallel processing
-./olive-clone pull --file ../projects-inventory.json -o /path --parallel 3
-```
-
-### Interactive Mode
-```bash
-# Interactive project selection within any command
-./olive-clone clone --file ../projects-inventory.json -o /path --interactive
-
-# Interactive pull
-./olive-clone pull --file ../projects-inventory.json -o /path --interactive
+syncx pull --file projects-inventory.json -o ~/repos --parallel 3
 ```
 
 ## 📊 Monitoring & Validation Commands
@@ -177,60 +214,60 @@ go build -o olive-clone main.go
 ### Dry Run (Preview)
 ```bash
 # Preview all operations
-./olive-clone clone --file ../projects-inventory.json -o /path --dry-run -v
+syncx clone --file projects-inventory.json -o ~/repos --dry-run -v
 
 # Preview clone to fresh directory (guarantees only new clones)
-./olive-clone clone --file ../projects-inventory.json -o /fresh/path --dry-run -v
+syncx clone --file projects-inventory.json -o ~/fresh-repos --dry-run -v
 
 # Preview pull operations
-./olive-clone pull --file ../projects-inventory.json -o /path --dry-run -v
+syncx pull --file projects-inventory.json -o ~/repos --dry-run -v
 ```
 
 ### Status & Validation
 ```bash
 # Check what needs updating
-./olive-clone status --file ../projects-inventory.json -o /path -v
+syncx status --file projects-inventory.json -o ~/repos -v
 
 # Validate inventory file
-./olive-clone list --file ../projects-inventory.json
+syncx list --file projects-inventory.json
 
 # Show detailed statistics
-./olive-clone clone --file ../projects-inventory.json --show-groups
+syncx clone --file projects-inventory.json --show-groups
 ```
 
 ## 🎯 Use Case Examples
 
 ### Initial Environment Setup
 ```bash
-# 1. First time setup - use wizard
-./olive-clone wizard --file ../projects-inventory.json
-
-# 2. Or direct clone everything
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar -v
+# Clone all repositories to set up environment
+syncx clone --file projects-inventory.json --protocol ssh -o ~/repos -v
 ```
 
 ### Daily Development Workflow
 ```bash
+# First, check for uncommitted changes before syncing
+syncx check --file projects-inventory.json -o ~/repos -v
+
 # Update existing projects only (preserve local changes in new dirs)
-./olive-clone pull --file ../projects-inventory.json -o /Users/vennet/Olive.com/uproarcar -v
+syncx pull --file projects-inventory.json -o ~/repos -v
 
 # Or full sync (clone new + update existing)
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar -v
+syncx clone --file projects-inventory.json --protocol ssh -o ~/repos -v
 ```
 
-### Adding New Team Projects
+### Adding New Projects
 ```bash
 # Clone only new projects from recent inventory updates (use fresh directory)
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar-new -v
+syncx clone --file projects-inventory.json --protocol ssh -o ~/repos-new -v
 ```
 
-### Working with Specific Teams
+### Working with Specific Groups
 ```bash
-# Get all Team Ludus projects
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar --group "Team Ludus/Libraries" -v
+# Get all Frontend projects
+syncx clone --file projects-inventory.json --protocol ssh -o ~/repos --group "Frontend" -v
 
-# Update only Team Sharks projects
-./olive-clone pull --file ../projects-inventory.json -o /Users/vennet/Olive.com/uproarcar --group "Team Sharks/Microservices" -v
+# Update only Backend projects
+syncx pull --file projects-inventory.json -o ~/repos --group "Backend" -v
 ```
 
 ### Managing Multiple Repository Collections
@@ -239,31 +276,31 @@ go build -o olive-clone main.go
 # Each collection is independent and can be managed separately using the -o flag
 
 # Production environment
-./syncx clone --file ../projects-inventory.json --protocol ssh -o ~/production-repos
-./syncx check --file ../projects-inventory.json -o ~/production-repos
+syncx clone --file projects-inventory.json --protocol ssh -o ~/production-repos
+syncx check --file projects-inventory.json -o ~/production-repos
 
 # Development/testing environment
-./syncx clone --file ../projects-inventory.json --protocol ssh -o ~/dev-repos
-./syncx check --file ../projects-inventory.json -o ~/dev-repos
+syncx clone --file projects-inventory.json --protocol ssh -o ~/dev-repos
+syncx check --file projects-inventory.json -o ~/dev-repos
 
 # Backup/archive location
-./syncx pull --file ../projects-inventory.json -o ~/backup-repos
-./syncx check --file ../projects-inventory.json -o ~/backup-repos
+syncx pull --file projects-inventory.json -o ~/backup-repos
+syncx check --file projects-inventory.json -o ~/backup-repos
 
 # Personal workspace
-./syncx clone --file ../projects-inventory.json --protocol ssh -o ~/workspace/olive-projects
-./syncx check --file ../projects-inventory.json -o ~/workspace/olive-projects
+syncx clone --file projects-inventory.json --protocol ssh -o ~/workspace/projects
+syncx check --file projects-inventory.json -o ~/workspace/projects
 
 # Quick check across all your collections (with inventory)
-for dir in ~/production-repos ~/dev-repos ~/backup-repos ~/workspace/olive-projects; do
+for dir in ~/production-repos ~/dev-repos ~/backup-repos ~/workspace/projects; do
   echo "Checking $dir..."
-  ./syncx check --file ../projects-inventory.json -o "$dir"
+  syncx check --file projects-inventory.json -o "$dir"
 done
 
 # Quick scan across all collections (WITHOUT inventory - just finds all git repos!)
-for dir in ~/production-repos ~/dev-repos ~/backup-repos ~/workspace/olive-projects; do
+for dir in ~/production-repos ~/dev-repos ~/backup-repos ~/workspace/projects; do
   echo "Scanning $dir..."
-  ./syncx scan "$dir" -d 3
+  syncx scan "$dir" -d 3
 done
 ```
 
@@ -273,74 +310,30 @@ done
 # The scan command automatically discovers all git repositories recursively
 
 # Scan your entire workspace
-./syncx scan ~/workspace
+syncx scan ~/workspace
 
 # Scan with limited depth for faster results
-./syncx scan ~/workspace -d 3
+syncx scan ~/workspace -d 3
 
 # Scan current directory
-./syncx scan .
+syncx scan .
 
 # Scan and show clean repos too
-./syncx scan ~/projects --show-clean
+syncx scan ~/projects --show-clean
 
 # Scan home directory for forgotten repos
-./syncx scan ~ -d 4
+syncx scan ~ -d 4
 
 # Scan with more parallel processing
-./syncx scan /Users/vennet/Olive.com --parallel 20 -d 5
+syncx scan ~/projects --parallel 20 -d 5
 
 # Scan external drive
-./syncx scan /Volumes/External/projects -d 5
+syncx scan /Volumes/External/projects -d 5
 
 # Before leaving work - check everything!
-./syncx scan ~/workspace -v
-./syncx scan ~/projects -v
-./syncx scan ~/Documents/code -d 3
-```
-
-## 🎯 Your Essential Commands (Ready to Use)
-
-### Complete Repository Sync
-```bash
-# Clone all projects + update existing ones (recommended daily command)
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar
-
-# Same with verbose output for monitoring
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar -v
-
-# Preview what would happen before executing
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar --dry-run -v
-```
-
-### Clone Only New Projects (No Updates)
-```bash
-# Clone only new projects to fresh directory (guarantees no updates)
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar-new
-
-# Preview clone-only to fresh directory
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar-new --dry-run -v
-```
-
-### Update Only Existing Projects
-```bash
-# Update existing projects only (no new clones)
-./olive-clone pull --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar
-
-# Update with verbose monitoring
-./olive-clone pull --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar -v
-```
-
-### Group-Specific Operations
-```bash
-# Target specific group (clone + update)
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar --group "Tools/Sales"
-
-# Update only specific group
-./olive-clone pull --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar --group "Analytics"
-
-# Clone specific group to fresh location (new projects only)
-./olive-clone clone --file ../projects-inventory.json --protocol ssh -o /Users/vennet/Olive.com/uproarcar-tools --group "Tools"
+syncx scan ~/workspace -v
+syncx scan ~/projects -v
+syncx scan ~/Documents/code -d 3
 ```
 
 ## ✨ Key Features
@@ -349,7 +342,7 @@ done
 - **Automatic directory creation** for missing group structures
 - **Intelligent diff detection** between inventory JSON and physical structure
 - **MD5-based change detection** for inventory updates
-- **Persistent tracking** with `.olive-clone-tracker.json` files
+- **Persistent tracking** with `.syncx-tracker.json` files
 - **Git change detection** using `git fetch` to check for remote updates
 
 ### 🚀 Enhanced Git Operations
@@ -368,16 +361,28 @@ done
 
 ### 🎨 Beautiful User Experience
 - **Colorized output** with emojis and progress bars
-- **Interactive wizard** for guided setup
 - **Verbose monitoring** with detailed progress tracking
 - **Dry-run preview** for all operations
 - **Clear error reporting** with actionable messages
 
 ## 🔧 Development Commands
 
+### Using Make (Recommended)
+```bash
+make help       # Show all available commands
+make build      # Build the application
+make install    # Build and install globally
+make uninstall  # Remove installation
+make clean      # Clean build artifacts
+make test       # Run tests
+make fmt        # Format code
+make run        # Run locally without installing
+```
+
+### Direct Commands
 ```bash
 # Build the application
-go build -o olive-clone main.go
+go build -o syncx main.go
 
 # Build for development with scripts
 ./scripts/build.sh
@@ -398,7 +403,7 @@ go mod download
 ## 📁 Project Structure
 
 ```
-olive-clone-assistant-v2/
+syncx/
 ├── main.go                 # Application entry point
 ├── go.mod                 # Go module definition
 ├── go.sum                 # Go module checksums
@@ -409,55 +414,127 @@ olive-clone-assistant-v2/
 │   ├── root.go            # Root command and global flags
 │   ├── clone.go           # Clone/update repositories with smart tracking
 │   ├── pull.go            # Update existing repositories only
+│   ├── check.go           # Check for uncommitted changes
+│   ├── scan.go            # Scan directories for git repos
 │   ├── list.go            # List projects and groups
-│   ├── status.go          # Check repository status
-│   ├── wizard.go          # Interactive wizard
-│   └── processor.go       # Project processing with tracking
+│   └── status.go          # Check repository status
 │
 ├── internal/              # Core functionality
 │   ├── types.go           # Data structures and types
 │   ├── logger.go          # Colored logging system
 │   ├── git.go             # Git operations with enhanced tracking
 │   ├── inventory.go       # Inventory file processing with smart analysis
-│   ├── tracker.go         # Smart tracking system (NEW)
-│   └── wizard.go          # Interactive wizard system
+│   └── tracker.go         # Smart tracking system
 │
 └── scripts/               # Build and utility scripts
     ├── build.sh           # Build script
     ├── install.sh         # Installation script
-    └── release.sh         # Release preparation
+    └── uninstall.sh       # Uninstall script
 ```
 
-## 🆕 Latest Improvements (v2.0)
+## 📂 Directory Structure
 
-### **🔄 Smart Tracking System**
-- **Automatic project tracking** with `.olive-clone-tracker.json` files
-- **Inventory change detection** using MD5 hashing
-- **Smart diff analysis** to identify new, modified, and removed projects
-- **Git change detection** to check for remote updates
-- **Persistent state management** across multiple runs
+When you run `syncx clone` with a base directory (e.g., `~/repos`), all projects are organized under a `projects/` subdirectory:
 
-### **📁 Intelligent Directory Management**
-- **Automatic structure creation** based on URL mapping
-- **Group hierarchy preservation** from JSON to physical directories
-- **Conflict resolution** for existing directories
-- **Path extraction** from GitLab URLs with proper nesting
+```
+~/repos/
+├── projects/                    # All repositories go here
+│   ├── frontend/
+│   │   ├── web-app/
+│   │   └── mobile-app/
+│   ├── backend/
+│   │   ├── api-server/
+│   │   └── auth-service/
+│   ├── devops/
+│   │   └── infrastructure/
+│   └── tools/
+│       └── utilities/
+└── .syncx-tracker.json         # Tracking file (auto-generated)
+```
 
-### **🚀 Enhanced Performance**
-- **Concurrent operations** with configurable parallelism
-- **Smart skip logic** for up-to-date repositories
-- **Optimized git operations** with fetch-first strategy
-- **Progress tracking** with detailed operation statistics
+## 📋 Project Inventory Format
 
-### **🎯 Improved User Experience**
-- **Clear operation modes** (clone, pull, wizard)
-- **Group-based filtering** for targeted operations
-- **Comprehensive dry-run preview** for all commands
-- **Detailed verbose output** for monitoring and debugging
-- **Interactive project selection** with wizard guidance
+The application expects a `projects-inventory.json` file with this structure:
+```json
+{
+  "physical-location": "optional-location",
+  "groups": [
+    {
+      "name": "Frontend",
+      "projects": [
+        {"name": "web-app", "url": "git@github.com:org/web-app.git"},
+        {"name": "mobile-app", "url": "git@github.com:org/mobile-app.git"}
+      ],
+      "groups": [
+        {
+          "name": "Components",
+          "projects": [
+            {"name": "ui-library", "url": "git@github.com:org/ui-library.git"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Backend",
+      "projects": [
+        {"name": "api-server", "url": "git@github.com:org/api-server.git"},
+        {"name": "auth-service", "url": "git@github.com:org/auth-service.git"}
+      ]
+    }
+  ],
+  "projects": [
+    {"name": "documentation", "url": "git@github.com:org/docs.git"}
+  ]
+}
+```
+
+## 🏗️ Architecture
+
+This is a Go CLI application built with the Cobra framework for managing multiple Git repositories. The architecture follows a clean separation of concerns:
+
+### Core Structure
+- **`main.go`** - Application entry point that delegates to cmd package
+- **`cmd/`** - Cobra CLI commands and command-line interface logic
+  - `root.go` - Root command with global flags and configuration
+  - `clone.go` - Repository cloning and updating functionality
+  - `pull.go` - Pull updates for existing repositories
+  - `check.go` - Check for uncommitted changes
+  - `scan.go` - Scan directories recursively for git repos
+  - `list.go` - Project inventory listing and exploration
+  - `status.go` - Repository health checking
+- **`internal/`** - Core business logic and data structures
+  - `types.go` - Data structures (Project, Group, Inventory, OperationResult)
+  - `git.go` - Git operations (clone, pull, status checking)
+  - `inventory.go` - JSON inventory file processing
+  - `logger.go` - Colored logging and output formatting
+  - `tracker.go` - Smart repository tracking system
+
+### Key Concepts
+- **Inventory System**: Projects are organized in JSON files with hierarchical groups
+- **Protocol Support**: Both SSH and HTTP git protocols
+- **Smart Tracking System**: Tracks repository state and optimizes operations
+- **Parallel Processing**: Configurable concurrent operations for performance
+- **Directory Structure**: Projects organized under `projects/` subdirectory
+
+### Dependencies
+- `github.com/spf13/cobra` - CLI framework
+- `github.com/fatih/color` - Terminal colors
+- `github.com/schollz/progressbar/v3` - Progress bars
+- `github.com/briandowns/spinner` - Loading spinners
+
+## 🧪 Testing and Quality
+
+- Run `go test ./...` for unit tests
+- Use `go fmt ./...` to format code according to Go standards
+- The application includes dry-run mode for safe operation testing
+- Verbose logging available with `--verbose` flag for debugging
+
+## 📄 License
+
+See LICENSE file for details.
 
 ---
 
-**🫒 Built with ❤️ for the Olive.com team**
+**Built with ❤️ using Go and Cobra**
 
 *For additional development guidance and architectural details, see [CLAUDE.md](CLAUDE.md)*
