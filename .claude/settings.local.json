@@ -18,7 +18,21 @@
       "Bash(make build-dev:*)",
       "Bash(make install-dev:*)",
       "Bash(export PATH=\"$HOME/bin:$PATH\")",
-      "Bash(olive-clone:*)"
+      "Bash(olive-clone:*)",
+      "Bash(syncx --version:*)",
+      "Bash(syncx list:*)",
+      "Bash(syncx:*)",
+      "Bash(make help:*)",
+      "Bash(go get:*)",
+      "Bash(./syncx:*)",
+      "Bash(make build:*)",
+      "Bash(time ./build/syncx clone:*)",
+      "Bash(./build/syncx clone:*)",
+      "Bash(./build/syncx list:*)",
+      "Bash(make install:*)",
+      "Bash(./scripts/install.sh:*)",
+      "Bash(./build/syncx check:*)",
+      "Bash(./build/syncx scan:*)"
     ],
     "deny": []
   }

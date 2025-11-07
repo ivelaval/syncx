@@ -61,11 +61,25 @@ func CollectAllProjects(inventory Inventory) []ProjectInfo {
 		}
 	}
 
+	// Determine which structure to use (new format with Root or legacy format)
+	var groups []Group
+	var projects []Project
+
+	if inventory.Root != nil {
+		// New format: data is inside the "root" property
+		groups = inventory.Root.Groups
+		projects = inventory.Root.Projects
+	} else {
+		// Legacy format: data is at the top level
+		groups = inventory.Groups
+		projects = inventory.Projects
+	}
+
 	// Collect from main groups
-	collectFromGroups(inventory.Groups, "")
+	collectFromGroups(groups, "")
 
 	// Collect standalone projects
-	for _, project := range inventory.Projects {
+	for _, project := range projects {
 		if project.URL != "" && project.Name != "" {
 			projectKey := fmt.Sprintf("%s|%s", project.Name, project.URL)
 			if !projectsFound[projectKey] {
@@ -82,9 +96,14 @@ func CollectAllProjects(inventory Inventory) []ProjectInfo {
 	return allProjects
 }
 
-// ScanAndClassifyProjectsWithTracking scans using the new tracking system
+// ScanAndClassifyProjectsWithTracking scans using the new tracking system (backward compatible)
 func ScanAndClassifyProjectsWithTracking(allProjects []ProjectInfo, baseDir, protocol, inventoryFile string, logger *Logger) ([]ProjectInfo, []ProjectInfo, []ProjectInfo, error) {
-	logger.Header("🔍 Smart Project Analysis with Tracking")
+	return ScanAndClassifyProjectsWithTrackingSkipCheck(allProjects, baseDir, protocol, inventoryFile, false, logger)
+}
+
+// ScanAndClassifyProjectsWithTrackingSkipCheck scans using the new tracking system with skip check option
+func ScanAndClassifyProjectsWithTrackingSkipCheck(allProjects []ProjectInfo, baseDir, protocol, inventoryFile string, skipCheck bool, logger *Logger) ([]ProjectInfo, []ProjectInfo, []ProjectInfo, error) {
+	// Spinner is handled by caller
 
 	// Load or create tracker
 	tracker, err := LoadOrCreateTracker(baseDir, inventoryFile)
@@ -155,31 +174,44 @@ func ScanAndClassifyProjectsWithTracking(allProjects []ProjectInfo, baseDir, pro
 	}
 
 	// Process unchanged projects (check for git changes)
-	logger.Info("🔍 Checking unchanged projects for remote updates...")
-	for _, project := range diff.UnchangedProjects {
-		if _, err := os.Stat(project.LocalPath); err == nil && IsGitRepository(project.LocalPath) {
-			hasChanges, currentHash, checkErr := CheckGitChanges(project.LocalPath, logger)
-			if checkErr != nil {
-				// Check if error is due to empty repository
-				if strings.Contains(checkErr.Error(), "empty") {
-					logger.Warning("Repository %s is empty (no commits), marking for pull attempt", project.Name)
+	if skipCheck {
+		logger.Info("⚡ Skip-check enabled: Marking all unchanged projects as up-to-date (no remote verification)")
+		for _, project := range diff.UnchangedProjects {
+			if _, err := os.Stat(project.LocalPath); err == nil && IsGitRepository(project.LocalPath) {
+				logger.Debug("✅ Repository %s assumed up to date (skip-check)", project.Name)
+				projectsUpToDate = append(projectsUpToDate, project)
+			} else {
+				logger.Warning("Tracked project not found or not a git repo: %s", project.LocalPath)
+				projectsToClone = append(projectsToClone, project)
+			}
+		}
+	} else {
+		logger.Info("🔍 Checking unchanged projects for remote updates...")
+		for _, project := range diff.UnchangedProjects {
+			if _, err := os.Stat(project.LocalPath); err == nil && IsGitRepository(project.LocalPath) {
+				hasChanges, currentHash, checkErr := CheckGitChanges(project.LocalPath, logger)
+				if checkErr != nil {
+					// Check if error is due to empty repository
+					if strings.Contains(checkErr.Error(), "empty") {
+						logger.Warning("Repository %s is empty (no commits), marking for pull attempt", project.Name)
+						projectsToUpdate = append(projectsToUpdate, project)
+					} else {
+						logger.Warning("Failed to check git changes for %s: %v", project.Name, checkErr)
+						projectsToUpdate = append(projectsToUpdate, project)
+					}
+				} else if hasChanges {
+					logger.Info("🔄 Repository %s has remote changes", project.Name)
 					projectsToUpdate = append(projectsToUpdate, project)
 				} else {
-					logger.Warning("Failed to check git changes for %s: %v", project.Name, checkErr)
-					projectsToUpdate = append(projectsToUpdate, project)
+					logger.Debug("✅ Repository %s is up to date", project.Name)
+					projectsUpToDate = append(projectsUpToDate, project)
+					// Update tracker timestamp
+					UpdateTrackedProject(tracker, project, "up-to-date", currentHash)
 				}
-			} else if hasChanges {
-				logger.Info("🔄 Repository %s has remote changes", project.Name)
-				projectsToUpdate = append(projectsToUpdate, project)
 			} else {
-				logger.Debug("✅ Repository %s is up to date", project.Name)
-				projectsUpToDate = append(projectsUpToDate, project)
-				// Update tracker timestamp
-				UpdateTrackedProject(tracker, project, "up-to-date", currentHash)
+				logger.Warning("Tracked project not found or not a git repo: %s", project.LocalPath)
+				projectsToClone = append(projectsToClone, project)
 			}
-		} else {
-			logger.Warning("Tracked project not found or not a git repo: %s", project.LocalPath)
-			projectsToClone = append(projectsToClone, project)
 		}
 	}
 

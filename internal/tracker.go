@@ -199,9 +199,8 @@ func CheckGitChanges(localPath string, logger *Logger) (bool, string, error) {
 	}
 	currentHash := strings.TrimSpace(string(currentHashOutput))
 	
-	// Fetch from remote to get latest refs
-	fetchCmd := exec.Command("git", "-C", localPath, "fetch", "--all", "--quiet")
-	if err := fetchCmd.Run(); err != nil {
+	// Fast fetch from remote with timeout (only current branch)
+	if err := runGitCommandWithTimeout(20*time.Second, "-C", localPath, "fetch", "--quiet"); err != nil {
 		logger.Warning("Failed to fetch for %s: %v", localPath, err)
 		return false, currentHash, nil // Continue even if fetch fails
 	}

@@ -27,27 +27,27 @@ var (
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "olive-sync",
-	Short: "🫒 A powerful repository synchronization assistant for Olive.com projects",
-	Long: color.New(color.FgGreen, color.Bold).Sprint(`
-🫒 Olive Sync Assistant
-═══════════════════════
+	Use:   "syncx",
+	Short: "⚡ A powerful repository synchronization assistant",
+	Long: color.New(color.FgCyan, color.Bold).Sprint(`
+⚡ SyncX - Repository Synchronization Assistant
+════════════════════════════════════════════════
 
-A modern, interactive repository synchronization tool built specifically for Olive.com projects.
+A modern, interactive repository synchronization tool for managing multiple Git projects.
 Features include:
 
-• 🎨 Beautiful colored output and progress bars  
+• 🎨 Beautiful colored output and progress bars
 • 🔄 Smart clone/update detection
-• 📊 Interactive project selection
+• 📊 Intelligent repository tracking
 • ⚡ Fast parallel operations
 • 🔧 Flexible configuration options
 • 📈 Detailed progress tracking
 
-Use 'olive-sync [command] --help' for more information about a command.`),
+Use 'syncx [command] --help' for more information about a command.`),
 	Version: fmt.Sprintf("%s (built: %s, commit: %s)", Version, BuildTime, GitCommit),
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// Setup global configuration
-		setupGlobals()
+		setupGlobals(cmd)
 	},
 }
 
@@ -72,14 +72,21 @@ func init() {
 	rootCmd.PersistentFlags().MarkDeprecated("directory", "use --output or -o instead")
 
 	// Add version template with colors
-	rootCmd.SetVersionTemplate(color.New(color.FgCyan, color.Bold).Sprintf("🫒 Olive Clone Assistant v{{.Version}}\n"))
+	rootCmd.SetVersionTemplate(color.New(color.FgCyan, color.Bold).Sprintf("⚡ SyncX v{{.Version}}\n"))
 }
 
 func initConfig() {
 	// Configuration initialization will be implemented later
 }
 
-func setupGlobals() {
+func setupGlobals(cmd *cobra.Command) {
+	// Commands that don't require inventory file
+	commandsWithoutInventory := map[string]bool{
+		"scan":    true,
+		"version": true,
+		"help":    true,
+	}
+
 	// Validate protocol
 	if protocol != "ssh" && protocol != "http" {
 		color.New(color.FgRed, color.Bold).Printf("❌ Invalid protocol: %s. Must be 'ssh' or 'http'\n", protocol)
@@ -89,11 +96,14 @@ func setupGlobals() {
 	// Handle output directory logic
 	setupOutputDirectory()
 
-	// Check if inventory file exists
-	if _, err := os.Stat(file); os.IsNotExist(err) {
-		color.New(color.FgRed, color.Bold).Printf("❌ Inventory file not found: %s\n", file)
-		color.New(color.FgYellow).Println("💡 Tip: Create a projects-inventory.json file or specify a different file with --file")
-		os.Exit(1)
+	// Check if inventory file exists (skip for commands that don't need it)
+	cmdName := cmd.Name()
+	if !commandsWithoutInventory[cmdName] {
+		if _, err := os.Stat(file); os.IsNotExist(err) {
+			color.New(color.FgRed, color.Bold).Printf("❌ Inventory file not found: %s\n", file)
+			color.New(color.FgYellow).Println("💡 Tip: Create a projects-inventory.json file or specify a different file with --file")
+			os.Exit(1)
+		}
 	}
 }
 

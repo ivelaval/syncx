@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# Installation script for Olive Clone Assistant v2.0
+# Installation script for SyncX
 set -e
 
-echo "🫒 Installing Olive Clone Assistant v2.0"
-echo "========================================"
+echo "⚡ Installing SyncX"
+echo "===================="
 echo ""
 
 # Check if binary exists
-if [ ! -f "build/olive-clone" ]; then
+if [ ! -f "build/syncx" ]; then
     echo "❌ Binary not found. Running build first..."
     ./scripts/build.sh
 fi
@@ -25,9 +25,9 @@ case $ARCH in
     *) echo "❌ Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
-BINARY_NAME="olive-clone"
-if [ -f "build/olive-clone-${OS}-${ARCH}" ]; then
-    BINARY_NAME="olive-clone-${OS}-${ARCH}"
+BINARY_NAME="syncx"
+if [ -f "build/syncx-${OS}-${ARCH}" ]; then
+    BINARY_NAME="syncx-${OS}-${ARCH}"
 fi
 
 echo "🔍 Detected platform: ${OS}/${ARCH}"
@@ -38,8 +38,8 @@ echo ""
 INSTALL_DIR=""
 NEEDS_SUDO=false
 
-if command -v olive-clone &> /dev/null; then
-    CURRENT_PATH=$(which olive-clone)
+if command -v syncx &> /dev/null; then
+    CURRENT_PATH=$(which syncx)
     echo "⚠️  Existing installation found: $CURRENT_PATH"
     read -p "Replace existing installation? (y/N): " -r
     echo ""
@@ -72,11 +72,11 @@ echo "📂 Installing to: $INSTALL_DIR"
 # Copy binary
 if [ "$NEEDS_SUDO" = true ]; then
     echo "🔒 Administrator privileges required for installation to $INSTALL_DIR"
-    sudo cp "build/${BINARY_NAME}" "$INSTALL_DIR/olive-clone"
-    sudo chmod +x "$INSTALL_DIR/olive-clone"
+    sudo cp "build/${BINARY_NAME}" "$INSTALL_DIR/syncx"
+    sudo chmod +x "$INSTALL_DIR/syncx"
 else
-    cp "build/${BINARY_NAME}" "$INSTALL_DIR/olive-clone"
-    chmod +x "$INSTALL_DIR/olive-clone"
+    cp "build/${BINARY_NAME}" "$INSTALL_DIR/syncx"
+    chmod +x "$INSTALL_DIR/syncx"
 fi
 
 # Add to PATH if needed
@@ -98,7 +98,7 @@ if [ "$INSTALL_DIR" = "$HOME/bin" ] && [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
     # Add to shell config if not already present
     if [ -f "$SHELL_RC" ] && ! grep -q 'export PATH="$HOME/bin:$PATH"' "$SHELL_RC"; then
         echo '' >> "$SHELL_RC"
-        echo '# Added by olive-clone installer' >> "$SHELL_RC"
+        echo '# Added by syncx installer' >> "$SHELL_RC"
         echo 'export PATH="$HOME/bin:$PATH"' >> "$SHELL_RC"
         echo "✅ Added to $SHELL_RC"
         echo "⚠️  Please run: source $SHELL_RC"
@@ -109,18 +109,18 @@ echo ""
 echo "✅ Installation complete!"
 echo ""
 echo "🎉 Quick Start:"
-echo "   olive-clone --help                    # Show all commands"
-echo "   olive-clone wizard                    # Interactive setup"
-echo "   olive-clone clone --file inventory.json --protocol ssh -o ~/repos"
+echo "   syncx --help                    # Show all commands"
+echo "   syncx wizard                    # Interactive setup"
+echo "   syncx clone --file inventory.json --protocol ssh -o ~/repos"
 echo ""
 
 # Test installation
 echo "🔍 Testing installation..."
-if command -v olive-clone &> /dev/null; then
-    echo "✅ olive-clone is available globally"
-    olive-clone --version 2>/dev/null || echo "Version: 2.0.0"
+if command -v syncx &> /dev/null; then
+    echo "✅ syncx is available globally"
+    syncx --version 2>/dev/null || echo "Version: 2.0.0"
 else
-    echo "⚠️  olive-clone is not yet in PATH"
+    echo "⚠️  syncx is not yet in PATH"
     echo "   Run: export PATH=\"$INSTALL_DIR:\$PATH\""
     echo "   Or restart your terminal"
 fi

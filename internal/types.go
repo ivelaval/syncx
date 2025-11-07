@@ -23,11 +23,19 @@ type Group struct {
 	Groups   []Group   `json:"groups,omitempty"`
 }
 
+// InventoryRoot represents the content inside the "root" property
+type InventoryRoot struct {
+	Groups   []Group   `json:"groups"`
+	Projects []Project `json:"projects"`
+}
+
 // Inventory represents the root structure of the JSON file
 type Inventory struct {
-	PhysicalLocation string    `json:"phisical-location,omitempty"`
-	Groups           []Group   `json:"groups"`
-	Projects         []Project `json:"projects"`
+	PhysicalLocation string         `json:"phisical-location,omitempty"`
+	Root             *InventoryRoot `json:"root,omitempty"`
+	// Legacy support for old format (will be nil if new format is used)
+	Groups   []Group   `json:"groups,omitempty"`
+	Projects []Project `json:"projects,omitempty"`
 }
 
 // OperationResult represents the result of a clone/pull operation

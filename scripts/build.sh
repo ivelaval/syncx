@@ -15,7 +15,7 @@ if [ -n "$1" ]; then
     VERSION=$1
 fi
 
-echo "🫒 Building Olive Clone Assistant v${VERSION}"
+echo "⚡ Building SyncX v${VERSION}"
 echo "=========================================="
 
 # Get build information
@@ -30,7 +30,7 @@ LDFLAGS="-X olive-clone-assistant-v2/cmd.Version=${VERSION} -X olive-clone-assis
 mkdir -p build/
 
 echo "📦 Building for current platform..."
-go build -ldflags "${LDFLAGS}" -o build/olive-clone main.go
+go build -ldflags "${LDFLAGS}" -o build/syncx main.go
 
 echo "🔨 Building cross-platform binaries..."
 
@@ -47,12 +47,12 @@ for platform in "${PLATFORMS[@]}"; do
     platform_split=(${platform//\// })
     GOOS=${platform_split[0]}
     GOARCH=${platform_split[1]}
-    
-    output_name="olive-clone-${GOOS}-${GOARCH}"
+
+    output_name="syncx-${GOOS}-${GOARCH}"
     if [ $GOOS = "windows" ]; then
         output_name="${output_name}.exe"
     fi
-    
+
     echo "Building for ${GOOS}/${GOARCH}..."
     env GOOS=$GOOS GOARCH=$GOARCH go build \
         -ldflags "${LDFLAGS}" \

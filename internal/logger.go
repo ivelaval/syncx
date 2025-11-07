@@ -2,9 +2,9 @@ package internal
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
+	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
 )
 
@@ -95,8 +95,7 @@ func (l *Logger) Scan(format string, args ...interface{}) {
 // Header prints a colored header
 func (l *Logger) Header(text string) {
 	fmt.Println()
-	color.New(color.FgCyan, color.Bold, color.Underline).Println(text)
-	color.New(color.FgCyan).Println(strings.Repeat("═", len(text)))
+	color.New(color.FgCyan, color.Bold).Println(text)
 	fmt.Println()
 }
 
@@ -108,12 +107,15 @@ func (l *Logger) Separator() {
 // Banner prints the application banner
 func (l *Logger) Banner() {
 	banner := `
-🫒 ╔═══════════════════════════════════════╗
-   ║        Olive Clone Assistant          ║
-   ║     Modern Repository Management      ║
-   ╚═══════════════════════════════════════╝`
-	
-	color.New(color.FgGreen, color.Bold).Println(banner)
+ ███████╗██╗   ██╗███╗   ██╗ ██████╗██╗  ██╗
+ ██╔════╝╚██╗ ██╔╝████╗  ██║██╔════╝╚██╗██╔╝
+ ███████╗ ╚████╔╝ ██╔██╗ ██║██║      ╚███╔╝
+ ╚════██║  ╚██╔╝  ██║╚██╗██║██║      ██╔██╗
+ ███████║   ██║   ██║ ╚████║╚██████╗██╔╝ ██╗
+ ╚══════╝   ╚═╝   ╚═╝  ╚═══╝ ╚═════╝╚═╝  ╚═╝`
+
+	color.New(color.FgCyan, color.Bold).Println(banner)
+	color.New(color.FgWhite).Println("         Repository Sync Assistant")
 	fmt.Println()
 }
 
@@ -168,4 +170,37 @@ func (l *Logger) Summary(summary Summary) {
 // Timestamp returns the current timestamp for logging
 func (l *Logger) Timestamp() string {
 	return time.Now().Format("15:04:05")
+}
+
+// NewSpinner creates a new spinner with consistent styling
+func (l *Logger) NewSpinner(message string) *spinner.Spinner {
+	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	s.Suffix = " " + message
+	s.Color("cyan")
+	return s
+}
+
+// StartSpinner creates and starts a spinner
+func (l *Logger) StartSpinner(message string) *spinner.Spinner {
+	s := l.NewSpinner(message)
+	s.Start()
+	return s
+}
+
+// StopSpinnerSuccess stops spinner with success message
+func (l *Logger) StopSpinnerSuccess(s *spinner.Spinner, message string) {
+	s.Stop()
+	color.New(color.FgGreen).Printf("✅ %s\n", message)
+}
+
+// StopSpinnerError stops spinner with error message
+func (l *Logger) StopSpinnerError(s *spinner.Spinner, message string) {
+	s.Stop()
+	color.New(color.FgRed).Printf("❌ %s\n", message)
+}
+
+// StopSpinnerWarning stops spinner with warning message
+func (l *Logger) StopSpinnerWarning(s *spinner.Spinner, message string) {
+	s.Stop()
+	color.New(color.FgYellow).Printf("⚠️  %s\n", message)
 }

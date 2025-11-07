@@ -61,8 +61,6 @@ func processProjectsWithTracking(projectsToClone, projectsToPull, projectsUpToDa
 		mutex.Unlock()
 	}
 
-	logger.Header("🚀 Processing Repositories with Smart Tracking")
-
 	// Start clone operations
 	for _, project := range projectsToClone {
 		wg.Add(1)
@@ -82,6 +80,7 @@ func processProjectsWithTracking(projectsToClone, projectsToPull, projectsUpToDa
 	fmt.Println()
 
 	// Show detailed results after progress bar completes
+	fmt.Println()
 	logger.Header("📊 Operation Results")
 
 	var successfulOps, failedOps, emptyOps []internal.OperationResult

@@ -1,6 +1,17 @@
 # Development Workflow Guide
 
-Esta guía explica las mejores prácticas para desarrollar y versionar el proyecto Olive Clone Assistant.
+Esta guía explica las mejores prácticas para desarrollar y versionar el proyecto SyncX.
+
+## 📁 Directory Structure Overview
+
+SyncX organizes all cloned repositories under a `projects/` subdirectory with automatic path cleaning:
+
+**Example:**
+- Base directory: `/Users/vennet/Olive.com`
+- Projects location: `/Users/vennet/Olive.com/projects/`
+- Example project: `/Users/vennet/Olive.com/projects/analytics/fenske/`
+
+The application automatically removes redundant organizational prefixes (`uproarcar`, `olive-com`) from Git URLs to keep paths clean.
 
 ## 🚀 Flujo de Trabajo de Desarrollo Rápido
 
@@ -16,8 +27,8 @@ vim internal/git.go
 make install-dev
 
 # 3. Prueba inmediatamente
-olive-clone --version
-olive-clone clone --file projects.json ...
+syncx --version
+syncx clone --file projects.json ...
 ```
 
 **Ventajas:**
@@ -32,8 +43,8 @@ olive-clone clone --file projects.json ...
 make build-dev
 
 # Ejecuta directamente
-./olive-clone --version
-./olive-clone clone --file projects.json ...
+./syncx --version
+./syncx clone --file projects.json ...
 ```
 
 ### Opción 3: Ejecución Directa (Sin Compilar)
@@ -100,12 +111,12 @@ git push origin v2.2.0
 make build
 
 # Output:
-# - build/olive-clone (tu plataforma)
-# - build/olive-clone-darwin-amd64
-# - build/olive-clone-darwin-arm64
-# - build/olive-clone-linux-amd64
-# - build/olive-clone-linux-arm64
-# - build/olive-clone-windows-amd64.exe
+# - build/syncx (tu plataforma)
+# - build/syncx-darwin-amd64
+# - build/syncx-darwin-arm64
+# - build/syncx-linux-amd64
+# - build/syncx-linux-arm64
+# - build/syncx-windows-amd64.exe
 ```
 
 ### 5. Instalar Localmente
@@ -115,7 +126,7 @@ make build
 make install
 
 # Verifica
-olive-clone --version
+syncx --version
 # Output: 2.2.0 (built: 2025-01-15_10:30:00, commit: abc1234)
 ```
 
@@ -178,8 +189,8 @@ git checkout -b feature/empty-repo-detection
 # 2. Desarrollar y probar iterativamente
 vim internal/git.go
 make install-dev
-olive-clone --version  # Verás: 2.1.0-dev
-olive-clone clone ...  # Probar
+syncx --version  # Verás: 2.1.0-dev
+syncx clone ...  # Probar
 
 # 3. Cuando esté listo
 git add .
@@ -203,7 +214,7 @@ make build
 make install
 
 # 9. Verify
-olive-clone --version  # Verás: 2.2.0 (built: ...)
+syncx --version  # Verás: 2.2.0 (built: ...)
 
 # 10. Push
 git push origin main --tags
@@ -239,7 +250,7 @@ make install      # Instalar localmente
 
 ```bash
 # Ver información completa
-olive-clone --version
+syncx --version
 
 # Output con versión de desarrollo:
 # 2.1.0-dev (built: 2025-01-15_10:30:00, commit: abc1234)

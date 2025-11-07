@@ -22,6 +22,8 @@ go build -o olive-clone main.go
 |---------|---------|----------|
 | `clone` | Clone new + update existing | Daily sync, full repository management |
 | `pull` | Update existing projects only | Quick updates without new clones |
+| `check` | Check for uncommitted local changes | Pre-sync validation, change detection |
+| `scan` | Recursively scan directory for git repos | No inventory needed, workspace scanning |
 | `wizard` | Interactive guided setup | First-time users, complex configurations |
 | `list` | Show projects and groups | Discovery, validation |
 | `status` | Check repository status | Monitoring, troubleshooting |
@@ -116,6 +118,27 @@ go build -o olive-clone main.go
 # Show groups for any command
 ./olive-clone pull --file ../projects-inventory.json --show-groups
 
+# Check for uncommitted changes in all repositories (requires inventory)
+./syncx check --file ../projects-inventory.json -o /Users/vennet/Olive.com/uproarcar
+
+# Check for changes with verbose output
+./syncx check --file ../projects-inventory.json -o /Users/vennet/Olive.com/uproarcar -v
+
+# Scan directory recursively for git repos with changes (NO inventory needed!)
+./syncx scan /Users/vennet/Olive.com/uproarcar
+./syncx scan ~/workspace -v
+./syncx scan . -d 3 --show-clean
+
+# Check different clone locations (useful for multiple clones)
+./syncx check --file ../projects-inventory.json -o ~/production-repos
+./syncx check --file ../projects-inventory.json -o ~/development-repos
+./syncx check --file ../projects-inventory.json -o ~/workspace/olive
+
+# Scan multiple locations quickly
+./syncx scan ~/production-repos -d 3
+./syncx scan ~/development-repos -d 3
+./syncx scan ~/workspace/olive -d 4
+
 # Check status of existing repositories
 ./olive-clone status --output /Users/vennet/Olive.com/uproarcar --verbose
 ```
@@ -208,6 +231,72 @@ go build -o olive-clone main.go
 
 # Update only Team Sharks projects
 ./olive-clone pull --file ../projects-inventory.json -o /Users/vennet/Olive.com/uproarcar --group "Team Sharks/Microservices" -v
+```
+
+### Managing Multiple Repository Collections
+```bash
+# Scenario: You maintain multiple clones for different purposes
+# Each collection is independent and can be managed separately using the -o flag
+
+# Production environment
+./syncx clone --file ../projects-inventory.json --protocol ssh -o ~/production-repos
+./syncx check --file ../projects-inventory.json -o ~/production-repos
+
+# Development/testing environment
+./syncx clone --file ../projects-inventory.json --protocol ssh -o ~/dev-repos
+./syncx check --file ../projects-inventory.json -o ~/dev-repos
+
+# Backup/archive location
+./syncx pull --file ../projects-inventory.json -o ~/backup-repos
+./syncx check --file ../projects-inventory.json -o ~/backup-repos
+
+# Personal workspace
+./syncx clone --file ../projects-inventory.json --protocol ssh -o ~/workspace/olive-projects
+./syncx check --file ../projects-inventory.json -o ~/workspace/olive-projects
+
+# Quick check across all your collections (with inventory)
+for dir in ~/production-repos ~/dev-repos ~/backup-repos ~/workspace/olive-projects; do
+  echo "Checking $dir..."
+  ./syncx check --file ../projects-inventory.json -o "$dir"
+done
+
+# Quick scan across all collections (WITHOUT inventory - just finds all git repos!)
+for dir in ~/production-repos ~/dev-repos ~/backup-repos ~/workspace/olive-projects; do
+  echo "Scanning $dir..."
+  ./syncx scan "$dir" -d 3
+done
+```
+
+### Scanning Directories Without Inventory
+```bash
+# Perfect for when you don't have or need the inventory file
+# The scan command automatically discovers all git repositories recursively
+
+# Scan your entire workspace
+./syncx scan ~/workspace
+
+# Scan with limited depth for faster results
+./syncx scan ~/workspace -d 3
+
+# Scan current directory
+./syncx scan .
+
+# Scan and show clean repos too
+./syncx scan ~/projects --show-clean
+
+# Scan home directory for forgotten repos
+./syncx scan ~ -d 4
+
+# Scan with more parallel processing
+./syncx scan /Users/vennet/Olive.com --parallel 20 -d 5
+
+# Scan external drive
+./syncx scan /Volumes/External/projects -d 5
+
+# Before leaving work - check everything!
+./syncx scan ~/workspace -v
+./syncx scan ~/projects -v
+./syncx scan ~/Documents/code -d 3
 ```
 
 ## 🎯 Your Essential Commands (Ready to Use)

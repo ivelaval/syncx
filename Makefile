@@ -5,7 +5,7 @@ VERSION := $(shell cat VERSION 2>/dev/null || echo "dev")
 
 # Default target
 help:
-	@echo "🫒 Olive Clone Assistant v$(VERSION) - Available Commands"
+	@echo "⚡ SyncX v$(VERSION) - Available Commands"
 	@echo "=========================================================="
 	@echo ""
 	@echo "Development:"
@@ -32,7 +32,7 @@ help:
 	@echo "Quick Development Workflow:"
 	@echo "  1. Edit code"
 	@echo "  2. make install-dev    # Fast install for testing"
-	@echo "  3. olive-clone --version"
+	@echo "  3. syncx --version"
 	@echo ""
 	@echo "Release Workflow:"
 	@echo "  1. make bump-minor     # Update version"
@@ -49,28 +49,28 @@ version:
 
 # Quick build for development (current platform only)
 build-dev:
-	@echo "🔨 Building olive-clone for development..."
+	@echo "🔨 Building syncx for development..."
 	@VERSION=$$(cat VERSION) && \
 	BUILD_TIME=$$(date -u '+%Y-%m-%d_%H:%M:%S') && \
 	GIT_COMMIT=$$(git rev-parse --short HEAD 2>/dev/null || echo "dev") && \
 	LDFLAGS="-X olive-clone-assistant-v2/cmd.Version=$$VERSION-dev -X olive-clone-assistant-v2/cmd.BuildTime=$$BUILD_TIME -X olive-clone-assistant-v2/cmd.GitCommit=$$GIT_COMMIT" && \
-	go build -ldflags "$$LDFLAGS" -o olive-clone main.go
-	@echo "✅ Development build complete: ./olive-clone"
+	go build -ldflags "$$LDFLAGS" -o syncx main.go
+	@echo "✅ Development build complete: ./syncx"
 
 # Build all platforms (production)
 build:
-	@echo "🔨 Building olive-clone for all platforms..."
+	@echo "🔨 Building syncx for all platforms..."
 	@./scripts/build.sh
 
 # Quick install for development
 install-dev: build-dev
 	@echo "📦 Installing development build..."
 	@mkdir -p ~/bin
-	@cp olive-clone ~/bin/olive-clone
-	@chmod +x ~/bin/olive-clone
-	@echo "✅ Development version installed to ~/bin/olive-clone"
+	@cp syncx ~/bin/syncx
+	@chmod +x ~/bin/syncx
+	@echo "✅ Development version installed to ~/bin/syncx"
 	@echo ""
-	@echo "🎉 Test with: olive-clone --version"
+	@echo "🎉 Test with: syncx --version"
 
 # Build and install (production)
 install: build
@@ -84,7 +84,7 @@ uninstall:
 clean:
 	@echo "🧹 Cleaning build artifacts..."
 	@rm -rf build/
-	@rm -f olive-clone olive-clone-*
+	@rm -f syncx syncx-* olive-clone olive-clone-*
 	@echo "✅ Clean complete"
 
 # Run tests

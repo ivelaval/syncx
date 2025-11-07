@@ -42,7 +42,7 @@ Perfect for updating your existing workspace without adding new repos.
 func init() {
 	rootCmd.AddCommand(pullCmd)
 
-	pullCmd.Flags().IntVarP(&pullParallel, "parallel", "p", 3, "Number of parallel pull operations (1-10)")
+	pullCmd.Flags().IntVarP(&pullParallel, "parallel", "p", 10, "Number of parallel pull operations (1-20)")
 	pullCmd.Flags().StringVarP(&pullGroup, "group", "g", "", "Pull only repositories from specific group")
 }
 
@@ -58,13 +58,14 @@ func runPull(cmd *cobra.Command, args []string) {
 		fmt.Println()
 	}
 
-	// Load inventory
-	logger.Header("📋 Loading Project Inventory")
+	// Load inventory with spinner
+	spinnerLoad := logger.StartSpinner(fmt.Sprintf("Loading inventory from %s", file))
 	inventory, err := internal.LoadInventory(file)
 	if err != nil {
-		logger.Error("Failed to load inventory: %v", err)
+		logger.StopSpinnerError(spinnerLoad, fmt.Sprintf("Failed to load inventory: %v", err))
 		return
 	}
+	logger.StopSpinnerSuccess(spinnerLoad, "Inventory loaded successfully")
 
 	// Show physical location info
 	if inventory.PhysicalLocation != "" {
@@ -116,29 +117,65 @@ func runPull(cmd *cobra.Command, args []string) {
 	color.New(color.FgYellow).Printf("   Mode: Pull Only (existing repos only)\n")
 	fmt.Println()
 
-	// Scan for existing repositories only
-	logger.Header("🔍 Scanning for Existing Repositories")
+	// Load tracker to find actually cloned repositories
+	spinnerScan := logger.StartSpinner("Scanning for existing repositories using tracker...")
+	tracker, err := internal.LoadOrCreateTracker(absDir, file)
+	if err != nil {
+		logger.StopSpinnerWarning(spinnerScan, "Tracker not found, using inventory paths")
+
+		// Fallback: scan using inventory paths
+		var existingProjects []internal.ProjectInfo
+		for _, project := range allProjects {
+			if _, err := os.Stat(project.LocalPath); err == nil {
+				if internal.IsGitRepository(project.LocalPath) {
+					existingProjects = append(existingProjects, project)
+				}
+			}
+		}
+
+		if len(existingProjects) == 0 {
+			logger.Warning("No existing repositories found in %s", absDir)
+			logger.Info("💡 Use 'clone' command to download repositories first")
+			return
+		}
+
+		// Process fallback
+		summary := processPullOperations(existingProjects, logger)
+		summary.TotalDuration = time.Since(startTime).String()
+		logger.Summary(summary)
+		return
+	}
+
+	// Use tracker to find existing projects
 	var existingProjects []internal.ProjectInfo
+	trackedCount := 0
 
 	for _, project := range allProjects {
-		if _, err := os.Stat(project.LocalPath); err == nil {
-			if internal.IsGitRepository(project.LocalPath) {
-				existingProjects = append(existingProjects, project)
-				logger.Info("✓ Found: %s", project.Name)
-			} else {
-				logger.Warning("⚠️  Directory exists but not a git repo: %s", project.Name)
+		// Find project in tracker by URL
+		for _, trackedProject := range tracker.Projects {
+			if trackedProject.URL == project.URL {
+				// Use the tracked local path (actual location)
+				project.LocalPath = trackedProject.LocalPath
+
+				// Verify it still exists
+				if _, err := os.Stat(project.LocalPath); err == nil {
+					if internal.IsGitRepository(project.LocalPath) {
+						existingProjects = append(existingProjects, project)
+						trackedCount++
+					}
+				}
+				break
 			}
 		}
 	}
+
+	logger.StopSpinnerSuccess(spinnerScan, fmt.Sprintf("Found %d tracked repositories", trackedCount))
 
 	if len(existingProjects) == 0 {
 		logger.Warning("No existing repositories found in %s", absDir)
 		logger.Info("💡 Use 'clone' command to download repositories first")
 		return
 	}
-
-	logger.Success("Found %d existing repositories to update", len(existingProjects))
-	fmt.Println()
 
 	// Process only existing projects
 	summary := processPullOperations(existingProjects, logger)
@@ -159,7 +196,7 @@ func processPullOperations(projects []internal.ProjectInfo, logger *internal.Log
 	var mutex sync.Mutex
 	var wg sync.WaitGroup
 
-	// Create clean progress bar
+	// Create clean progress bar that stays on one line
 	bar := progressbar.NewOptions(totalProjects,
 		progressbar.OptionSetDescription("🔄 Pulling updates"),
 		progressbar.OptionSetWidth(50),
@@ -176,6 +213,7 @@ func processPullOperations(projects []internal.ProjectInfo, logger *internal.Log
 			BarEnd:        "]",
 		}),
 		progressbar.OptionSetRenderBlankState(true),
+		progressbar.OptionClearOnFinish(),
 	)
 
 	// Create semaphore for parallel processing
@@ -204,12 +242,9 @@ func processPullOperations(projects []internal.ProjectInfo, logger *internal.Log
 		
 		mutex.Lock()
 		results = append(results, result)
-		bar.Describe(fmt.Sprintf("🔄 Updating: %s", project.Name))
 		bar.Add(1)
 		mutex.Unlock()
 	}
-
-	logger.Header("🔄 Pulling Updates")
 
 	// Start pull operations
 	for _, project := range projects {
@@ -220,7 +255,6 @@ func processPullOperations(projects []internal.ProjectInfo, logger *internal.Log
 	// Wait for all operations to complete
 	wg.Wait()
 	bar.Finish()
-	fmt.Println()
 	fmt.Println()
 
 	// Show detailed results after progress bar completes

@@ -1,15 +1,15 @@
 #!/bin/bash
 
-# Uninstallation script for Olive Clone Assistant v2.0
+# Uninstallation script for SyncX
 set -e
 
-echo "🫒 Uninstalling Olive Clone Assistant v2.0"
+echo "🫒 Uninstalling SyncX"
 echo "==========================================="
 echo ""
 
 # Find installation location
-if command -v olive-clone &> /dev/null; then
-    INSTALL_PATH=$(which olive-clone)
+if command -v syncx &> /dev/null; then
+    INSTALL_PATH=$(which syncx)
     INSTALL_DIR=$(dirname "$INSTALL_PATH")
 
     echo "📍 Found installation: $INSTALL_PATH"
@@ -37,10 +37,10 @@ if command -v olive-clone &> /dev/null; then
 
     for rc_file in "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.zshrc"; do
         if [ -f "$rc_file" ]; then
-            if grep -q "# Added by olive-clone installer" "$rc_file"; then
+            if grep -q "# Added by syncx installer" "$rc_file"; then
                 echo "   Cleaning $rc_file..."
                 # Remove the comment line and the next line (PATH export)
-                sed -i.bak '/# Added by olive-clone installer/,+1d' "$rc_file"
+                sed -i.bak '/# Added by syncx installer/,+1d' "$rc_file"
                 rm -f "${rc_file}.bak"
             fi
         fi
@@ -53,14 +53,14 @@ if command -v olive-clone &> /dev/null; then
     echo "   source ~/.bashrc  # or ~/.zshrc"
 
 else
-    echo "❌ olive-clone is not installed or not in PATH"
+    echo "❌ syncx is not installed or not in PATH"
     echo ""
     echo "🔍 Searching for installations in common locations..."
 
     FOUND=false
     for dir in "/usr/local/bin" "$HOME/bin" "$HOME/.local/bin"; do
-        if [ -f "$dir/olive-clone" ]; then
-            echo "   Found: $dir/olive-clone"
+        if [ -f "$dir/syncx" ]; then
+            echo "   Found: $dir/syncx"
             FOUND=true
         fi
     done

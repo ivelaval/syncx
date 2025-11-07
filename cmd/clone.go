@@ -13,10 +13,10 @@ import (
 )
 
 var (
-	interactive     bool
 	parallel        int
 	groupFilter     string
 	showGroups      bool
+	checkRemote     bool
 )
 
 // cloneCmd represents the clone command
@@ -42,11 +42,10 @@ This command intelligently scans your directory structure and:
 func init() {
 	rootCmd.AddCommand(cloneCmd)
 
-	cloneCmd.Flags().BoolVarP(&interactive, "interactive", "i", false, "Enable interactive mode for project selection")
-	cloneCmd.Flags().IntVarP(&parallel, "parallel", "p", 1, "Number of parallel operations (1-10)")
+	cloneCmd.Flags().IntVarP(&parallel, "parallel", "p", 10, "Number of parallel operations (1-20)")
 	cloneCmd.Flags().StringVarP(&groupFilter, "group", "g", "", "Filter projects by group name")
 	cloneCmd.Flags().BoolVar(&showGroups, "show-groups", false, "Show available groups and exit")
-	
+	cloneCmd.Flags().BoolVar(&checkRemote, "check-remote", false, "Check remote for updates on existing repos (slower)")
 }
 
 func runClone(cmd *cobra.Command, args []string) {
@@ -61,16 +60,14 @@ func runClone(cmd *cobra.Command, args []string) {
 		fmt.Println()
 	}
 
-	// Load inventory
-	logger.Header("📋 Loading Project Inventory")
+	// Load inventory with spinner
+	spinnerLoad := logger.StartSpinner(fmt.Sprintf("Loading inventory from %s", file))
 	inventory, err := internal.LoadInventory(file)
 	if err != nil {
-		logger.Error("Failed to load inventory: %v", err)
+		logger.StopSpinnerError(spinnerLoad, fmt.Sprintf("Failed to load inventory: %v", err))
 		return
 	}
-
-	// Validate and show inventory statistics
-	internal.ValidateAndShowInventoryStats(inventory, logger)
+	logger.StopSpinnerSuccess(spinnerLoad, "Inventory loaded successfully")
 
 	// Collect all projects
 	allProjects := internal.CollectAllProjects(*inventory)
@@ -79,7 +76,8 @@ func runClone(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	logger.Success("✅ Successfully loaded %d projects from %s", len(allProjects), file)
+	color.New(color.FgGreen).Printf("✅ All projects look valid (%d projects)\n", len(allProjects))
+	fmt.Println()
 
 	// Show groups if requested
 	if showGroups {
@@ -111,67 +109,53 @@ func runClone(cmd *cobra.Command, args []string) {
 		internal.ShowOutputDirectoryInfo(absDir, logger)
 	}
 
-	// Interactive mode - Use the new wizard system
-	if interactive {
-		wizard := internal.NewInteractiveWizard(allProjects, logger)
-		choice, err := wizard.RunWizard()
-		if err != nil {
-			logger.Error("Interactive wizard failed: %v", err)
-			return
-		}
-		
-		// Apply wizard choices
-		allProjects = choice.SelectedProjects
-		protocol = choice.Protocol
-		if choice.Directory != "" {
-			directory = choice.Directory
-			// Re-validate the new directory from wizard
-			absDir, err = internal.EnsureOutputDirectory(directory, logger)
-			if err != nil {
-				logger.Error("Wizard output directory setup failed: %v", err)
-				return
-			}
-		}
-		parallel = choice.Parallel
-		dryRun = choice.DryRun
-		verbose = choice.Verbose
-		
-		// Update logger with new verbosity
-		logger = internal.NewLogger(verbose)
-	}
-
 	// Display configuration
 	logger.Header("⚙️  Configuration")
-	color.New(color.FgCyan).Printf("   Protocol: %s\n", protocol)
-	color.New(color.FgCyan).Printf("   Output Directory: %s\n", absDir)
-	color.New(color.FgCyan).Printf("   Projects: %d\n", len(allProjects))
-	color.New(color.FgCyan).Printf("   Parallel: %d\n", parallel)
+	fmt.Println()
+	color.New(color.FgWhite).Printf("   Protocol: %s\n", protocol)
+	color.New(color.FgWhite).Printf("   Output Directory: %s\n", absDir)
+	color.New(color.FgWhite).Printf("   Projects: %d\n", len(allProjects))
+	color.New(color.FgWhite).Printf("   Parallel: %d\n", parallel)
 	fmt.Println()
 
-	// Use new smart tracking system
-	projectsToClone, projectsToPull, projectsUpToDate, err := internal.ScanAndClassifyProjectsWithTracking(allProjects, absDir, protocol, file, logger)
+	// Use new smart tracking system with spinner
+	var spinnerMessage string
+	if checkRemote {
+		spinnerMessage = "Analyzing project differences (checking remote for updates)..."
+	} else {
+		spinnerMessage = "Analyzing project differences (fast mode - local check only)..."
+	}
+	spinnerAnalysis := logger.StartSpinner(spinnerMessage)
+	skipCheck := !checkRemote  // Invert logic: if NOT checking remote, then skip check
+	projectsToClone, projectsToPull, projectsUpToDate, err := internal.ScanAndClassifyProjectsWithTrackingSkipCheck(allProjects, absDir, protocol, file, skipCheck, logger)
 	if err != nil {
-		logger.Error("Smart tracking failed, falling back to basic scan: %v", err)
+		logger.StopSpinnerWarning(spinnerAnalysis, "Smart tracking failed, using basic scan")
 		// Fallback to old system
 		projectsToClone, projectsToPull = internal.ScanAndClassifyProjects(allProjects, absDir, protocol, logger)
 		projectsUpToDate = []internal.ProjectInfo{}
+	} else {
+		existingCount := len(projectsToPull) + len(projectsUpToDate)
+		logger.StopSpinnerSuccess(spinnerAnalysis, fmt.Sprintf("Analysis complete: %d new, %d existing", len(projectsToClone), existingCount))
 	}
+	fmt.Println()
 
-	// Process both clone and pull (smart tracking handles the logic)
-	logger.Info("🎯 Smart tracking: Processing (%d clone + %d pull) repositories", len(projectsToClone), len(projectsToPull))
-
-	totalProjects := len(projectsToClone) + len(projectsToPull)
-	if totalProjects == 0 {
-		if len(projectsUpToDate) > 0 {
-			logger.Success("🎉 All %d projects are already up to date!", len(projectsUpToDate))
-		} else {
-			logger.Success("All projects are already up to date!")
-		}
+	// Clone mode: ONLY clone new projects (no pull)
+	if len(projectsToClone) == 0 {
+		existingCount := len(projectsToPull) + len(projectsUpToDate)
+		logger.Success("✅ No new projects to clone. All %d projects already exist!", existingCount)
+		logger.Info("💡 Use 'syncx pull' to update existing repositories")
 		return
 	}
 
-	// Process projects
-	summary := processProjectsWithTracking(projectsToClone, projectsToPull, projectsUpToDate, logger)
+	existingCount := len(projectsToPull) + len(projectsUpToDate)
+	if existingCount > 0 {
+		logger.Info("📦 Cloning %d new projects (%d already exist)", len(projectsToClone), existingCount)
+	} else {
+		logger.Info("📦 Cloning %d new projects", len(projectsToClone))
+	}
+
+	// Process ONLY new projects (clone only, no pull)
+	summary := processCloneOnly(projectsToClone, logger)
 	summary.TotalDuration = time.Since(startTime).String()
 
 	// Show summary
@@ -182,6 +166,141 @@ func runClone(cmd *cobra.Command, args []string) {
 	}
 }
 
+
+func processCloneOnly(projectsToClone []internal.ProjectInfo, logger *internal.Logger) internal.Summary {
+	totalProjects := len(projectsToClone)
+
+	var results []internal.OperationResult
+	var mutex sync.Mutex
+	var wg sync.WaitGroup
+
+	// Create clean progress bar with proper single-line rendering
+	bar := progressbar.NewOptions(totalProjects,
+		progressbar.OptionSetDescription("📥 Cloning new repositories"),
+		progressbar.OptionSetWidth(50),
+		progressbar.OptionShowCount(),
+		progressbar.OptionShowIts(),
+		progressbar.OptionSetItsString("repos"),
+		progressbar.OptionThrottle(65*time.Millisecond),
+		progressbar.OptionShowElapsedTimeOnFinish(),
+		progressbar.OptionSetTheme(progressbar.Theme{
+			Saucer:        "█",
+			SaucerHead:    "█",
+			SaucerPadding: "░",
+			BarStart:      "[",
+			BarEnd:        "]",
+		}),
+		progressbar.OptionSetRenderBlankState(true),
+		progressbar.OptionClearOnFinish(),
+		progressbar.OptionUseANSICodes(true), // Force ANSI codes for proper single-line updates
+	)
+
+	// Create semaphore for parallel processing
+	semaphore := make(chan struct{}, parallel)
+
+	// Process function for cloning only
+	processProject := func(project internal.ProjectInfo) {
+		defer wg.Done()
+		semaphore <- struct{}{}
+		defer func() { <-semaphore }()
+
+		var result internal.OperationResult
+		if dryRun {
+			result = internal.OperationResult{
+				Success:  true,
+				Project:  project,
+				Message:  fmt.Sprintf("DRY RUN: Would clone %s", project.Name),
+				IsClone:  true,
+				Duration: "0s",
+			}
+		} else {
+			result = internal.CloneRepositorySilent(project.GitURL, project.LocalPath)
+			result.Project = project
+		}
+
+		mutex.Lock()
+		results = append(results, result)
+		bar.Add(1)
+		mutex.Unlock()
+	}
+
+	// Start clone operations
+	for _, project := range projectsToClone {
+		wg.Add(1)
+		go processProject(project)
+	}
+
+	// Wait for all operations to complete
+	wg.Wait()
+	bar.Finish()
+	fmt.Println()
+
+	// Show detailed results after progress bar completes
+	logger.Header("📊 Clone Results")
+
+	var successfulOps, failedOps, emptyOps []internal.OperationResult
+	for _, result := range results {
+		if result.Success {
+			successfulOps = append(successfulOps, result)
+		} else if result.IsEmpty {
+			emptyOps = append(emptyOps, result)
+		} else {
+			failedOps = append(failedOps, result)
+		}
+	}
+
+	// Show successful operations summary
+	if len(successfulOps) > 0 {
+		color.New(color.FgGreen, color.Bold).Printf("✅ Successfully Cloned (%d):\n", len(successfulOps))
+		for _, result := range successfulOps {
+			color.New(color.FgGreen).Printf("   %s (%s)\n", result.Project.Name, result.Duration)
+		}
+		fmt.Println()
+	}
+
+	// Show empty repositories
+	if len(emptyOps) > 0 {
+		color.New(color.FgYellow).Printf("⚠️  Empty Repositories (%d):\n", len(emptyOps))
+		for _, result := range emptyOps {
+			color.New(color.FgYellow).Printf("   📭 %s (no commits)\n", result.Project.Name)
+		}
+		fmt.Println()
+	}
+
+	// Show failed operations details
+	if len(failedOps) > 0 {
+		color.New(color.FgRed, color.Bold).Printf("❌ Failed Clones (%d):\n", len(failedOps))
+		for _, result := range failedOps {
+			color.New(color.FgRed).Printf("   %s: %s\n", result.Project.Name, result.Message)
+		}
+		fmt.Println()
+	}
+
+	// Calculate summary
+	summary := internal.Summary{
+		TotalProjects: totalProjects,
+	}
+
+	var failedProjects []internal.ProjectInfo
+	var emptyProjects []internal.ProjectInfo
+
+	for _, result := range results {
+		if result.Success {
+			summary.SuccessCount++
+			summary.ClonedCount++
+		} else if result.IsEmpty {
+			summary.EmptyCount++
+			emptyProjects = append(emptyProjects, result.Project)
+		} else {
+			summary.FailureCount++
+			failedProjects = append(failedProjects, result.Project)
+		}
+	}
+
+	summary.FailedProjects = failedProjects
+	summary.EmptyProjects = emptyProjects
+	return summary
+}
 
 func processProjects(projectsToClone, projectsToPull []internal.ProjectInfo, logger *internal.Logger) internal.Summary {
 	totalProjects := len(projectsToClone) + len(projectsToPull)
@@ -232,8 +351,6 @@ func processProjects(projectsToClone, projectsToPull []internal.ProjectInfo, log
 		mutex.Unlock()
 	}
 
-	logger.Header("🚀 Processing Repositories")
-
 	// Start clone operations
 	for _, project := range projectsToClone {
 		wg.Add(1)
@@ -253,6 +370,7 @@ func processProjects(projectsToClone, projectsToPull []internal.ProjectInfo, log
 	fmt.Println()
 
 	// Show detailed results after progress bar completes
+	fmt.Println()
 	logger.Header("📊 Operation Results")
 
 	var successfulOps, failedOps, emptyOps []internal.OperationResult

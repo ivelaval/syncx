@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,6 +9,24 @@ import (
 	"strings"
 	"time"
 )
+
+// runGitCommandWithTimeout runs a git command with a timeout
+func runGitCommandWithTimeout(timeout time.Duration, args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", args...)
+	return cmd.Run()
+}
+
+// runGitCommandWithOutputAndTimeout runs a git command with timeout and returns output
+func runGitCommandWithOutputAndTimeout(timeout time.Duration, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", args...)
+	return cmd.CombinedOutput()
+}
 
 // formatGitURL converts base URL to proper git clone URL based on protocol
 func FormatGitURL(baseURL, protocol string) string {
@@ -55,6 +74,7 @@ func ExtractDirectoryPath(gitURL string) string {
 }
 
 // CreateProjectLocalPath creates the correct local path for a project based on its URL and base directory
+// Projects are organized under baseDir/projects/ to keep them separate from other files
 func CreateProjectLocalPath(baseDir, projectURL string, group string) string {
 	// Extract the path from the URL
 	dirPath := ExtractDirectoryPath(projectURL)
@@ -64,7 +84,7 @@ func CreateProjectLocalPath(baseDir, projectURL string, group string) string {
 			// Convert group path to directory structure
 			groupPath := strings.ToLower(strings.ReplaceAll(group, " ", "-"))
 			groupPath = strings.ReplaceAll(groupPath, "/", "/")
-			
+
 			// Extract project name from URL
 			parts := strings.Split(projectURL, "/")
 			if len(parts) > 0 {
@@ -72,13 +92,53 @@ func CreateProjectLocalPath(baseDir, projectURL string, group string) string {
 				if strings.HasSuffix(projectName, ".git") {
 					projectName = projectName[:len(projectName)-4]
 				}
-				return filepath.Join(baseDir, groupPath, projectName)
+				// Add 'projects/' subdirectory
+				return filepath.Join(baseDir, "projects", groupPath, projectName)
 			}
 		}
 		return ""
 	}
-	
-	return filepath.Join(baseDir, dirPath)
+
+	// Clean up the directory path to remove redundant prefixes
+	// For URLs like "gitlab.com:uproarcar/olive-com/analytics/fenske.git"
+	// We want to keep only the meaningful parts: "analytics/fenske"
+	cleanedPath := cleanDirectoryPath(dirPath)
+
+	// Add 'projects/' subdirectory to organize all repositories
+	return filepath.Join(baseDir, "projects", cleanedPath)
+}
+
+// cleanDirectoryPath removes common prefixes from the directory path
+// to create a cleaner directory structure
+func cleanDirectoryPath(dirPath string) string {
+	// Split the path into parts
+	parts := strings.Split(dirPath, "/")
+
+	// Common prefixes to skip (organization/company names)
+	skipPrefixes := map[string]bool{
+		"uproarcar":  true,
+		"olive-com":  true,
+		"olive.com":  true,
+		"olivecom":   true,
+	}
+
+	// Find the first meaningful part (skip common prefixes)
+	startIndex := 0
+	for i, part := range parts {
+		partLower := strings.ToLower(strings.TrimSpace(part))
+		if !skipPrefixes[partLower] {
+			startIndex = i
+			break
+		}
+	}
+
+	// If we skipped everything, use the original path
+	if startIndex >= len(parts) {
+		return dirPath
+	}
+
+	// Join the remaining meaningful parts
+	return strings.Join(parts[startIndex:], "/")
 }
 
 // EnsureDirectoryStructure creates all necessary parent directories for a project
@@ -119,7 +179,7 @@ func IsEmptyRepository(path string) bool {
 // CloneRepository clones a repository to the specified local path
 func CloneRepository(repoURL, localPath string, logger *Logger) OperationResult {
 	start := time.Now()
-	
+
 	// Create parent directory if it doesn't exist
 	parentDir := filepath.Dir(localPath)
 	if err := os.MkdirAll(parentDir, 0755); err != nil {
@@ -133,9 +193,8 @@ func CloneRepository(repoURL, localPath string, logger *Logger) OperationResult 
 
 	logger.Cloning("%s -> %s", repoURL, localPath)
 
-	// Execute git clone with more options for robustness
-	cmd := exec.Command("git", "clone", "--progress", "--verbose", repoURL, localPath)
-	output, err := cmd.CombinedOutput()
+	// Fast clone with timeout (60 seconds) and shallow depth for speed
+	output, err := runGitCommandWithOutputAndTimeout(60*time.Second, "clone", "--depth=1", "--single-branch", "--quiet", repoURL, localPath)
 	if err != nil {
 		return OperationResult{
 			Success: false,
@@ -153,6 +212,18 @@ func CloneRepository(repoURL, localPath string, logger *Logger) OperationResult 
 			IsClone: true,
 			Duration: time.Since(start).String(),
 		}
+	}
+
+	// Fix the refspec to allow fetching all branches in the future
+	if err := fixRefspec(localPath); err != nil {
+		logger.Warning("Could not fix refspec for %s: %v", localPath, err)
+		// Don't fail the clone operation for this
+	}
+
+	// Fetch all branches from remote
+	if err := fetchAllBranches(localPath); err != nil {
+		logger.Warning("Could not fetch all branches for %s: %v", localPath, err)
+		// Don't fail the clone operation for this
 	}
 
 	logger.Success("Cloned: %s", filepath.Base(localPath))
@@ -182,20 +253,17 @@ func PullRepository(localPath string, logger *Logger) OperationResult {
 
 	logger.Pulling("Getting latest changes: %s", localPath)
 
-	// First, try to fetch to ensure we have the latest refs
-	fetchCmd := exec.Command("git", "-C", localPath, "fetch", "--all")
-	if err := fetchCmd.Run(); err != nil {
+	// Fast fetch with timeout (30 seconds) - only fetch current branch
+	if err := runGitCommandWithTimeout(30*time.Second, "-C", localPath, "fetch", "--quiet"); err != nil {
 		logger.Warning("Fetch failed for %s: %v", localPath, err)
 	}
 
-	// Then pull
-	cmd := exec.Command("git", "-C", localPath, "pull", "--ff-only")
-	output, err := cmd.CombinedOutput()
+	// Fast pull with timeout (30 seconds) - no-stat for speed
+	output, err := runGitCommandWithOutputAndTimeout(30*time.Second, "-C", localPath, "pull", "--ff-only", "--no-stat", "--quiet")
 	if err != nil {
 		// Try again without --ff-only in case there are conflicts
 		logger.Warning("Fast-forward pull failed, trying regular pull...")
-		cmd = exec.Command("git", "-C", localPath, "pull")
-		output, err = cmd.CombinedOutput()
+		output, err = runGitCommandWithOutputAndTimeout(30*time.Second, "-C", localPath, "pull", "--no-stat", "--quiet")
 		if err != nil {
 			return OperationResult{
 				Success: false,
@@ -353,10 +421,30 @@ func CloneOrUpdateRepositorySilent(project ProjectInfo, dryRun bool, logger *Log
 	return result
 }
 
+// fixRefspec fixes the git refspec after cloning with --single-branch
+// This allows fetching all branches later with git fetch
+func fixRefspec(localPath string) error {
+	// Set the correct refspec for fetching all branches
+	cmd := exec.Command("git", "-C", localPath, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to fix refspec: %w", err)
+	}
+	return nil
+}
+
+// fetchAllBranches fetches all branches from remote after fixing refspec
+func fetchAllBranches(localPath string) error {
+	// Fetch all branches with timeout (30 seconds)
+	if err := runGitCommandWithTimeout(30*time.Second, "-C", localPath, "fetch", "--all", "--quiet"); err != nil {
+		return fmt.Errorf("failed to fetch all branches: %w", err)
+	}
+	return nil
+}
+
 // CloneRepositorySilent clones a repository without logging output
 func CloneRepositorySilent(repoURL, localPath string) OperationResult {
 	start := time.Now()
-	
+
 	// Create parent directory if it doesn't exist
 	if err := os.MkdirAll(filepath.Dir(localPath), 0755); err != nil {
 		return OperationResult{
@@ -367,15 +455,26 @@ func CloneRepositorySilent(repoURL, localPath string) OperationResult {
 		}
 	}
 
-	// Execute git clone silently
-	cmd := exec.Command("git", "clone", repoURL, localPath)
-	if err := cmd.Run(); err != nil {
+	// Fast clone with timeout and shallow depth
+	if err := runGitCommandWithTimeout(60*time.Second, "clone", "--depth=1", "--single-branch", "--quiet", repoURL, localPath); err != nil {
 		return OperationResult{
 			Success:  false,
 			Message:  fmt.Sprintf("Clone failed: %v", err),
 			IsClone:  true,
 			Duration: time.Since(start).String(),
 		}
+	}
+
+	// Fix the refspec to allow fetching all branches in the future
+	if err := fixRefspec(localPath); err != nil {
+		// Log warning but don't fail the clone operation
+		// The repository is still usable, just with limited refspec
+	}
+
+	// Fetch all branches from remote
+	if err := fetchAllBranches(localPath); err != nil {
+		// Log warning but don't fail the clone operation
+		// The repository is still usable, just with limited branch visibility
 	}
 
 	return OperationResult{
@@ -401,9 +500,13 @@ func PullRepositorySilent(localPath string) OperationResult {
 		}
 	}
 
-	// Execute git pull silently
-	cmd := exec.Command("git", "-C", localPath, "pull")
-	if err := cmd.Run(); err != nil {
+	// Fast fetch with timeout
+	if err := runGitCommandWithTimeout(30*time.Second, "-C", localPath, "fetch", "--quiet"); err != nil {
+		// Fetch failed, but continue with pull attempt
+	}
+
+	// Execute git pull silently with timeout and optimizations
+	if err := runGitCommandWithTimeout(30*time.Second, "-C", localPath, "pull", "--ff-only", "--no-stat", "--quiet"); err != nil {
 		return OperationResult{
 			Success:  false,
 			Message:  fmt.Sprintf("Pull failed: %v", err),
@@ -420,4 +523,62 @@ func PullRepositorySilent(localPath string) OperationResult {
 		IsEmpty:  false,
 		Duration: time.Since(start).String(),
 	}
+}
+
+// GetGitBranch returns the current branch name for a repository
+func GetGitBranch(path string) (string, error) {
+	cmd := exec.Command("git", "-C", path, "branch", "--show-current")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+// CheckRepositoryChanges checks for uncommitted changes in a repository
+// Returns: (modified, staged, untracked, error)
+func CheckRepositoryChanges(path string) (int, int, int, error) {
+	cmd := exec.Command("git", "-C", path, "status", "--porcelain")
+	output, err := cmd.Output()
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	modified := 0
+	staged := 0
+	untracked := 0
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+
+		// Git status --porcelain format:
+		// XY filename
+		// X = index status, Y = working tree status
+		if len(line) < 2 {
+			continue
+		}
+
+		indexStatus := line[0]
+		workTreeStatus := line[1]
+
+		// Check if file is in staging area (index)
+		if indexStatus != ' ' && indexStatus != '?' {
+			staged++
+		}
+
+		// Check if file is modified in working tree
+		if workTreeStatus == 'M' || workTreeStatus == 'D' {
+			modified++
+		}
+
+		// Check for untracked files
+		if indexStatus == '?' && workTreeStatus == '?' {
+			untracked++
+		}
+	}
+
+	return modified, staged, untracked, nil
 }
