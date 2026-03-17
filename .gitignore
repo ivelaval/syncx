@@ -1,0 +1,44 @@
+# Binaries
+syncx
+syncx-*
+*.exe
+olive-clone-assistant-v2
+build/
+
+# Go build artifacts
+*.o
+*.a
+*.so
+
+# Go test artifacts
+*.test
+coverage.out
+coverage.html
+
+# Dependency vendor directory
+vendor/
+
+# Go workspace
+go.work
+go.work.sum
+
+# Generated inventory files
+projects-inventory.json
+*-inventory.json
+.syncx-tracker.json
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Environment variables
+.env
+.env.*
