@@ -45,6 +45,7 @@ if command -v syncx &> /dev/null; then
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         INSTALL_DIR=$(dirname "$CURRENT_PATH")
+        [ ! -w "$INSTALL_DIR" ] && NEEDS_SUDO=true
     else
         echo "❌ Installation cancelled"
         exit 1
