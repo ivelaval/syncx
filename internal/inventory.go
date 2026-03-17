@@ -47,9 +47,11 @@ func CollectAllProjects(inventory Inventory) []ProjectInfo {
 					projectKey := fmt.Sprintf("%s|%s", project.Name, project.URL)
 					if !projectsFound[projectKey] {
 						allProjects = append(allProjects, ProjectInfo{
-							Name:  project.Name,
-							URL:   project.URL,
-							Group: groupName,
+							Name:          project.Name,
+							URL:           project.URL,
+							Group:         groupName,
+							DefaultBranch: project.DefaultBranch,
+							Description:   project.Description,
 						})
 						projectsFound[projectKey] = true
 					}
@@ -84,9 +86,11 @@ func CollectAllProjects(inventory Inventory) []ProjectInfo {
 			projectKey := fmt.Sprintf("%s|%s", project.Name, project.URL)
 			if !projectsFound[projectKey] {
 				allProjects = append(allProjects, ProjectInfo{
-					Name:  project.Name,
-					URL:   project.URL,
-					Group: "Standalone",
+					Name:          project.Name,
+					URL:           project.URL,
+					Group:         "Standalone",
+					DefaultBranch: project.DefaultBranch,
+					Description:   project.Description,
 				})
 				projectsFound[projectKey] = true
 			}

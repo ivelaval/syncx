@@ -2,25 +2,31 @@ package internal
 
 // Project represents a single project with name and URL
 type Project struct {
-	Name string `json:"name"`
-	URL  string `json:"url"`
+	Name          string `json:"name"`
+	URL           string `json:"url"`
+	HTTPUrl       string `json:"http_url,omitempty"`
+	DefaultBranch string `json:"default_branch,omitempty"`
+	Description   string `json:"description,omitempty"`
 }
 
 // ProjectInfo represents extended project information
 type ProjectInfo struct {
-	Name      string
-	URL       string
-	GitURL    string
-	LocalPath string
-	Group     string
+	Name          string
+	URL           string
+	GitURL        string
+	LocalPath     string
+	Group         string
+	DefaultBranch string
+	Description   string
 }
 
 // Group represents a group that can contain projects and/or subgroups
 type Group struct {
-	Name     string    `json:"name"`
-	Skip     bool      `json:"skip,omitempty"`
-	Projects []Project `json:"projects,omitempty"`
-	Groups   []Group   `json:"groups,omitempty"`
+	Name        string    `json:"name"`
+	Description string    `json:"description,omitempty"`
+	Skip        bool      `json:"skip,omitempty"`
+	Projects    []Project `json:"projects,omitempty"`
+	Groups      []Group   `json:"groups,omitempty"`
 }
 
 // InventoryRoot represents the content inside the "root" property

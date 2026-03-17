@@ -1,6 +1,6 @@
 # SyncX - Repository Synchronization Assistant
 
-A modern, intelligent repository synchronization tool for managing multiple Git projects with smart tracking and automatic directory management.
+A modern, intelligent repository synchronization tool for managing multiple Git projects with smart tracking, automatic directory management, and GitLab API integration.
 
 ## 🚀 Quick Start
 
@@ -45,11 +45,13 @@ make uninstall
 ./scripts/uninstall.sh
 ```
 
+---
+
 ## 📋 Commands Overview
 
-### Available Commands
 | Command | Purpose | Best For |
 |---------|---------|----------|
+| `generate-json` | Generate inventory from GitLab API | Initial setup, inventory refresh |
 | `clone` | Clone new + update existing | Daily sync, full repository management |
 | `pull` | Update existing projects only | Quick updates without new clones |
 | `check` | Check for uncommitted local changes | Pre-sync validation, change detection |
@@ -57,7 +59,127 @@ make uninstall
 | `list` | Show projects and groups | Discovery, validation |
 | `status` | Check repository status | Monitoring, troubleshooting |
 
-### Operation Modes Comparison
+---
+
+## 🔧 `generate-json` — Generate Inventory from GitLab
+
+Connects to the GitLab API and generates a `projects-inventory.json` file that reflects the full group/project hierarchy of your GitLab organization. The generated file includes metadata for each project (`default_branch`, `description`, `http_url`) to enable smarter operations.
+
+```bash
+syncx generate-json --token <gitlab-token> --group <group-path> --out <output-dir>
+```
+
+### Flags
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--token` | GitLab Personal Access Token | required |
+| `--group` | GitLab group path (e.g. `myorg/mygroup`) | required |
+| `--out` | Output directory for the generated file | `.` |
+| `--host` | GitLab host (for self-hosted instances) | `gitlab.com` |
+| `--filename` | Output filename | `projects-inventory.json` |
+
+### Examples
+
+```bash
+# Generate inventory for a GitLab group
+syncx generate-json --token glpat-xxxx --group myorg/mygroup --out ~/
+
+# Specify a custom output filename
+syncx generate-json --token glpat-xxxx --group myorg/mygroup --out ~/ --filename my-inventory.json
+
+# Self-hosted GitLab instance
+syncx generate-json --token glpat-xxxx --group myorg/mygroup --out ~/ --host gitlab.mycompany.com
+```
+
+### Output
+
+The command generates a hierarchical JSON file compatible with all `syncx` commands:
+
+```
+✅ Inventory generated successfully!
+   📁 File:     ~/projects-inventory.json
+   📦 Groups:   12
+   🗂️  Projects: 87
+```
+
+---
+
+## 🚀 `clone` — Clone and Update Repositories
+
+Clones new repositories and updates existing ones based on your inventory file. Intelligently uses `default_branch` from the inventory to ensure the correct branch is checked out.
+
+```bash
+syncx clone --file projects-inventory.json --protocol ssh -o ~/repos
+```
+
+### Flags
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--file` | Path to inventory JSON file | `projects-inventory.json` |
+| `--protocol` | Git protocol: `ssh` or `http` | `ssh` |
+| `-o, --output` | Output directory for repositories | auto-detected |
+| `--group` | Filter operations to a specific group | all groups |
+| `--parallel` | Number of parallel operations | 1 |
+| `--dry-run` | Preview operations without executing | false |
+| `-v, --verbose` | Verbose output | false |
+| `--show-groups` | Show available groups and exit | false |
+
+### Examples
+
+```bash
+# Clone all repositories (new) and update existing ones
+syncx clone --file projects-inventory.json --protocol ssh -o ~/repos
+
+# Preview what would happen without executing
+syncx clone --file projects-inventory.json --protocol ssh -o ~/repos --dry-run -v
+
+# Clone only a specific group
+syncx clone --file projects-inventory.json --protocol ssh -o ~/repos --group "Backend"
+
+# Speed up with parallel processing
+syncx clone --file projects-inventory.json --protocol ssh -o ~/repos --parallel 8
+
+# Use HTTPS instead of SSH
+syncx clone --file projects-inventory.json --protocol http -o ~/repos
+
+# Show all available groups
+syncx clone --file projects-inventory.json --show-groups
+```
+
+---
+
+## 🔄 `pull` — Update Existing Repositories
+
+Updates only already-cloned repositories. Does not clone new projects.
+
+```bash
+syncx pull --file projects-inventory.json -o ~/repos
+```
+
+### Flags
+
+Same as `clone`, except it never clones new repositories.
+
+### Examples
+
+```bash
+# Update all existing repositories
+syncx pull --file projects-inventory.json -o ~/repos
+
+# Update with verbose output
+syncx pull --file projects-inventory.json -o ~/repos -v
+
+# Update only Backend group
+syncx pull --file projects-inventory.json -o ~/repos --group "Backend"
+
+# Update in parallel
+syncx pull --file projects-inventory.json -o ~/repos --parallel 5
+```
+
+### `clone` vs `pull` comparison
+
 | Feature | `clone` | `pull` |
 |---------|---------|--------|
 | Clone new projects | ✅ | ❌ |
@@ -66,277 +188,369 @@ make uninstall
 | Group filtering | ✅ | ✅ |
 | Parallel processing | ✅ | ✅ |
 
-### Advanced Usage Tips
-| Scenario | Recommended Command |
-|----------|-------------------|
-| **Clone only new projects** | Use fresh output directory: `-o /new/path` |
-| **Clone specific project group** | Filter by group: `--group "GroupName"` |
-| **Preview before action** | Add `--dry-run -v` to any command |
-| **Initial environment setup** | `clone` to fresh directory |
-| **Daily sync workflow** | `clone` (handles both new and updates) |
-| **Update only existing** | `pull` (safe for preserving local changes) |
+---
 
-## 🚀 Quick One-Line Commands
+## 🔍 `check` — Check for Uncommitted Changes
 
-### Clone & Update Everything (Smart Mode)
+Scans repositories for uncommitted local changes before syncing, so you don't accidentally overwrite work in progress.
+
 ```bash
-# Clone new projects + update existing ones (recommended)
-syncx clone --file projects-inventory.json --protocol ssh -o ~/repos
-
-# Same but with verbose output
-syncx clone --file projects-inventory.json --protocol ssh -o ~/repos -v
-
-# Preview what will happen (dry run)
-syncx clone --file projects-inventory.json --protocol ssh -o ~/repos --dry-run -v
+syncx check --file projects-inventory.json -o ~/repos
 ```
 
-### Clone Only New Projects (Skip Updates)
-```bash
-# Method 1: Clone to a fresh directory (guarantees only new clones)
-syncx clone --file projects-inventory.json --protocol ssh -o ~/repos-new
+### Flags
 
-# Method 2: Filter by specific new groups
-syncx clone --file projects-inventory.json --protocol ssh -o ~/repos --group "NewGroup"
+| Flag | Description |
+|------|-------------|
+| `--file` | Path to inventory JSON file |
+| `-o, --output` | Directory where repositories are cloned |
+| `--group` | Filter to a specific group |
+| `--parallel` | Number of parallel checks |
+| `-v, --verbose` | Show clean repositories too |
 
-# Method 3: Use dry-run to preview, then manually select
-syncx clone --file projects-inventory.json --protocol ssh -o ~/repos --dry-run -v
-```
+### Examples
 
-### Update Only Existing Projects
-```bash
-# Update existing projects only (no new clones)
-syncx pull --file projects-inventory.json -o ~/repos
-
-# Update with verbose output
-syncx pull --file projects-inventory.json -o ~/repos -v
-```
-
-### Target Specific Groups
-```bash
-# Clone/update specific group
-syncx clone --file projects-inventory.json --protocol ssh -o ~/repos --group "Frontend"
-
-# Update only specific group
-syncx pull --file projects-inventory.json -o ~/repos --group "Backend"
-
-# Clone specific group to fresh location (new projects only)
-syncx clone --file projects-inventory.json --protocol ssh -o ~/repos-frontend --group "Frontend"
-```
-
-## 📋 Exploration & Discovery Commands
-
-### Project Discovery
-```bash
-# List all projects and groups
-syncx list --file projects-inventory.json --verbose
-
-# Show only available groups
-syncx clone --file projects-inventory.json --show-groups
-
-# Check status of existing repositories
-syncx status --output ~/repos --verbose
-```
-
-### Check for Uncommitted Changes
-
-#### With Inventory File
 ```bash
 # Check all repositories for uncommitted changes
 syncx check --file projects-inventory.json -o ~/repos
 
-# Check with verbose output to see clean repositories too
+# Verbose: show both dirty and clean repositories
 syncx check --file projects-inventory.json -o ~/repos -v
 
-# Check specific group for uncommitted changes
-syncx check --file projects-inventory.json -o ~/repos --group "Backend"
+# Check only a specific group
+syncx check --file projects-inventory.json -o ~/repos --group "Frontend"
 
-# Check with parallel processing for faster results
+# Fast parallel check
 syncx check --file projects-inventory.json -o ~/repos --parallel 20
 ```
 
-#### Scan Without Inventory (Fast Discovery)
+---
+
+## 📡 `scan` — Scan Directories Without Inventory
+
+Recursively scans a directory for git repositories with uncommitted changes. No inventory file needed.
+
 ```bash
-# Scan current directory for git repositories with changes
+syncx scan ~/repos
+```
+
+### Flags
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `path` | Directory to scan (positional argument) | `.` |
+| `-d, --depth` | Maximum directory recursion depth | 5 |
+| `--parallel` | Number of parallel operations | 10 |
+| `--show-clean` | Also show repositories without changes | false |
+| `-v, --verbose` | Show full repository paths | false |
+
+### Examples
+
+```bash
+# Scan current directory
 syncx scan .
 
-# Scan specific directory
+# Scan a specific directory
 syncx scan ~/repos
 
-# Scan with verbose output (shows full paths)
-syncx scan ~/workspace -v
+# Limit scan depth for faster results
+syncx scan ~/workspace -d 3
 
-# Scan with limited depth (faster for large directories)
-syncx scan ~/projects -d 3
+# Show all repositories, including clean ones
+syncx scan ~/repos --show-clean
 
-# Scan and show clean repositories too
-syncx scan . --show-clean
+# Scan with full paths in output
+syncx scan ~/projects -v
 
-# Scan home directory for all git repos with changes
-syncx scan ~ -d 5
-
-# Scan with more parallel processing for speed
-syncx scan ~/projects --parallel 20 -d 4
+# Fast parallel scan of a large workspace
+syncx scan ~/workspace --parallel 20 -d 4
 
 # Scan multiple locations
 syncx scan ~/production-repos
 syncx scan ~/dev-repos
-syncx scan ~/workspace
 
-# Quick scan of common locations
-for dir in ~/workspace ~/projects ~/Documents; do
-  echo "Scanning $dir..."
-  syncx scan "$dir" -d 3
-done
+# Scan home directory for forgotten repositories
+syncx scan ~ -d 4
 ```
 
-## ⚙️ Advanced Configuration Commands
+---
 
-### Protocol Options
+## 📋 `list` — List Projects from Inventory
+
+Displays all groups and projects from your inventory file. Shows `default_branch` next to each project name and `description` when available.
+
 ```bash
-# Use SSH (default, recommended)
-syncx clone --file projects-inventory.json --protocol ssh -o ~/repos
-
-# Use HTTPS (for environments without SSH keys)
-syncx clone --file projects-inventory.json --protocol http -o ~/repos
+syncx list --file projects-inventory.json
 ```
 
-### Parallel Processing
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--file` | Path to inventory JSON file |
+| `--groups-only` | Show only groups, not individual projects |
+| `--compact` | Compact display (one project per line) |
+| `-v, --verbose` | Show additional details (local path, etc.) |
+
+### Examples
+
 ```bash
-# Process multiple repositories in parallel (faster)
-syncx clone --file projects-inventory.json -o ~/repos --parallel 5
-
-# Pull with parallel processing
-syncx pull --file projects-inventory.json -o ~/repos --parallel 3
-```
-
-## 📊 Monitoring & Validation Commands
-
-### Dry Run (Preview)
-```bash
-# Preview all operations
-syncx clone --file projects-inventory.json -o ~/repos --dry-run -v
-
-# Preview clone to fresh directory (guarantees only new clones)
-syncx clone --file projects-inventory.json -o ~/fresh-repos --dry-run -v
-
-# Preview pull operations
-syncx pull --file projects-inventory.json -o ~/repos --dry-run -v
-```
-
-### Status & Validation
-```bash
-# Check what needs updating
-syncx status --file projects-inventory.json -o ~/repos -v
-
-# Validate inventory file
+# Full detailed view (shows branch and description)
 syncx list --file projects-inventory.json
 
-# Show detailed statistics
-syncx clone --file projects-inventory.json --show-groups
+# Compact view (one project per line)
+syncx list --file projects-inventory.json --compact
+
+# Show only groups summary
+syncx list --file projects-inventory.json --groups-only
+
+# Verbose: includes local paths
+syncx list --file projects-inventory.json -v
 ```
 
-## 🎯 Use Case Examples
+### Sample Output
 
-### Initial Environment Setup
-```bash
-# Clone all repositories to set up environment
-syncx clone --file projects-inventory.json --protocol ssh -o ~/repos -v
+```
+📁 Backend (3 projects)
+  📦 api-server  [main]
+      💬 REST API for the main application
+      🔗 git@gitlab.com:myorg/backend/api-server.git
+
+  📦 auth-service  [develop]
+      🔗 git@gitlab.com:myorg/backend/auth-service.git
 ```
 
-### Daily Development Workflow
+---
+
+## 📊 `status` — Check Repository Status
+
+Shows the health and sync status of cloned repositories.
+
 ```bash
-# First, check for uncommitted changes before syncing
+syncx status --file projects-inventory.json -o ~/repos
+```
+
+### Examples
+
+```bash
+# Check status of all repositories
+syncx status --file projects-inventory.json -o ~/repos
+
+# Verbose status with details
+syncx status --file projects-inventory.json -o ~/repos -v
+```
+
+---
+
+## ⚙️ Global Flags
+
+These flags are available on all commands:
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--file` | Path to inventory JSON file | `projects-inventory.json` |
+| `--protocol` | Git protocol: `ssh` or `http` | `ssh` |
+| `-o, --output` | Base output directory | auto-detected |
+| `-v, --verbose` | Enable verbose output | false |
+| `--dry-run` | Preview operations without executing | false |
+
+---
+
+## 🎯 Common Workflows
+
+### First-time setup from GitLab
+
+```bash
+# 1. Generate the inventory from your GitLab group
+syncx generate-json --token glpat-xxxx --group myorg/mygroup --out ~/
+
+# 2. Clone all repositories
+syncx clone --file ~/projects-inventory.json --protocol ssh -o ~/repos -v
+```
+
+### Daily sync workflow
+
+```bash
+# 1. Check for uncommitted changes first
 syncx check --file projects-inventory.json -o ~/repos -v
 
-# Update existing projects only (preserve local changes in new dirs)
+# 2. Pull updates (or clone new + update existing)
 syncx pull --file projects-inventory.json -o ~/repos -v
-
-# Or full sync (clone new + update existing)
-syncx clone --file projects-inventory.json --protocol ssh -o ~/repos -v
 ```
 
-### Adding New Projects
+### Refresh inventory and sync new projects
+
 ```bash
-# Clone only new projects from recent inventory updates (use fresh directory)
-syncx clone --file projects-inventory.json --protocol ssh -o ~/repos-new -v
+# 1. Regenerate inventory (picks up new repos from GitLab)
+syncx generate-json --token glpat-xxxx --group myorg/mygroup --out ~/
+
+# 2. Clone new + update existing
+syncx clone --file ~/projects-inventory.json --protocol ssh -o ~/repos -v
 ```
 
-### Working with Specific Groups
+### Work with a specific team's group
+
 ```bash
-# Get all Frontend projects
+# Clone only the Frontend group
 syncx clone --file projects-inventory.json --protocol ssh -o ~/repos --group "Frontend" -v
 
-# Update only Backend projects
+# Update only Backend
 syncx pull --file projects-inventory.json -o ~/repos --group "Backend" -v
+
+# Check only DevOps for uncommitted changes
+syncx check --file projects-inventory.json -o ~/repos --group "DevOps"
 ```
 
-### Managing Multiple Repository Collections
-```bash
-# Scenario: You maintain multiple clones for different purposes
-# Each collection is independent and can be managed separately using the -o flag
+### Managing multiple environments
 
-# Production environment
+```bash
+# Production clone
 syncx clone --file projects-inventory.json --protocol ssh -o ~/production-repos
 syncx check --file projects-inventory.json -o ~/production-repos
 
-# Development/testing environment
+# Development clone
 syncx clone --file projects-inventory.json --protocol ssh -o ~/dev-repos
 syncx check --file projects-inventory.json -o ~/dev-repos
 
-# Backup/archive location
+# Backup
 syncx pull --file projects-inventory.json -o ~/backup-repos
-syncx check --file projects-inventory.json -o ~/backup-repos
-
-# Personal workspace
-syncx clone --file projects-inventory.json --protocol ssh -o ~/workspace/projects
-syncx check --file projects-inventory.json -o ~/workspace/projects
-
-# Quick check across all your collections (with inventory)
-for dir in ~/production-repos ~/dev-repos ~/backup-repos ~/workspace/projects; do
-  echo "Checking $dir..."
-  syncx check --file projects-inventory.json -o "$dir"
-done
-
-# Quick scan across all collections (WITHOUT inventory - just finds all git repos!)
-for dir in ~/production-repos ~/dev-repos ~/backup-repos ~/workspace/projects; do
-  echo "Scanning $dir..."
-  syncx scan "$dir" -d 3
-done
 ```
 
-### Scanning Directories Without Inventory
+### End-of-day check (no inventory needed)
+
 ```bash
-# Perfect for when you don't have or need the inventory file
-# The scan command automatically discovers all git repositories recursively
-
-# Scan your entire workspace
-syncx scan ~/workspace
-
-# Scan with limited depth for faster results
-syncx scan ~/workspace -d 3
-
-# Scan current directory
-syncx scan .
-
-# Scan and show clean repos too
-syncx scan ~/projects --show-clean
-
-# Scan home directory for forgotten repos
-syncx scan ~ -d 4
-
-# Scan with more parallel processing
-syncx scan ~/projects --parallel 20 -d 5
-
-# Scan external drive
-syncx scan /Volumes/External/projects -d 5
-
-# Before leaving work - check everything!
+# Find any repository with uncommitted changes across your whole workspace
 syncx scan ~/workspace -v
-syncx scan ~/projects -v
-syncx scan ~/Documents/code -d 3
+syncx scan ~/projects -d 3
 ```
+
+---
+
+## 📋 Inventory File Format
+
+The `projects-inventory.json` file uses a hierarchical format with nested groups. Fields marked as optional are populated automatically when using `generate-json`.
+
+```json
+{
+  "groups": [
+    {
+      "name": "Backend",
+      "description": "Server-side services",
+      "projects": [
+        {
+          "name": "api-server",
+          "url": "git@gitlab.com:myorg/backend/api-server.git",
+          "http_url": "https://gitlab.com/myorg/backend/api-server.git",
+          "default_branch": "main",
+          "description": "Main REST API"
+        },
+        {
+          "name": "auth-service",
+          "url": "git@gitlab.com:myorg/backend/auth-service.git",
+          "http_url": "https://gitlab.com/myorg/backend/auth-service.git",
+          "default_branch": "develop"
+        }
+      ],
+      "groups": [
+        {
+          "name": "Microservices",
+          "projects": [
+            {
+              "name": "user-service",
+              "url": "git@gitlab.com:myorg/backend/microservices/user-service.git",
+              "default_branch": "main"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "DevOps",
+      "skip": true,
+      "projects": [
+        {
+          "name": "infrastructure",
+          "url": "git@gitlab.com:myorg/devops/infrastructure.git",
+          "default_branch": "main"
+        }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "documentation",
+      "url": "git@gitlab.com:myorg/documentation.git",
+      "default_branch": "main"
+    }
+  ]
+}
+```
+
+### Project Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | ✅ | Project name |
+| `url` | ✅ | SSH clone URL |
+| `http_url` | optional | HTTPS clone URL (used with `--protocol http`) |
+| `default_branch` | optional | Branch to checkout on clone |
+| `description` | optional | Shown in `syncx list` output |
+
+### Group Fields
+
+| Field | Description |
+|-------|-------------|
+| `name` | Group name |
+| `description` | Group description |
+| `skip` | Set to `true` to exclude this group from all operations |
+| `projects` | List of projects in this group |
+| `groups` | Nested subgroups |
+
+---
+
+## 📁 Project Structure
+
+```
+syncx/
+├── main.go                 # Application entry point
+├── go.mod                  # Go module definition
+├── go.sum                  # Go module checksums
+├── README.md               # Complete usage documentation
+├── CLAUDE.md               # Development guidance for Claude Code
+│
+├── cmd/                    # Cobra CLI commands
+│   ├── root.go             # Root command and global flags
+│   ├── clone.go            # Clone/update repositories with smart tracking
+│   ├── pull.go             # Update existing repositories only
+│   ├── check.go            # Check for uncommitted changes
+│   ├── scan.go             # Scan directories for git repos (no inventory)
+│   ├── list.go             # List projects and groups with metadata
+│   ├── status.go           # Check repository status
+│   └── generate_json.go    # Generate inventory from GitLab API
+│
+├── internal/               # Core functionality
+│   ├── types.go            # Data structures and types
+│   ├── logger.go           # Colored logging system
+│   ├── git.go              # Git operations (clone with branch support)
+│   ├── inventory.go        # Inventory file processing
+│   └── tracker.go          # Smart repository tracking system
+│
+└── scripts/                # Build and utility scripts
+    ├── build.sh             # Build script
+    ├── install.sh           # Installation script
+    └── uninstall.sh         # Uninstall script
+```
+
+---
 
 ## ✨ Key Features
+
+### 🔧 GitLab API Integration
+- **Automatic inventory generation** from any GitLab group or subgroup
+- **Recursive group traversal** capturing the full project hierarchy
+- **Rich metadata** (`default_branch`, `description`, `http_url`) stored in inventory
+- **Self-hosted GitLab** support via `--host` flag
+- **Paginated API** handling for large organizations
 
 ### 🎯 Smart Tracking System
 - **Automatic directory creation** for missing group structures
@@ -346,10 +560,10 @@ syncx scan ~/Documents/code -d 3
 - **Git change detection** using `git fetch` to check for remote updates
 
 ### 🚀 Enhanced Git Operations
+- **Branch-aware cloning** — uses `default_branch` from inventory to checkout the correct branch
 - **Robust clone operations** with verification and error handling
 - **Smart pull strategy** with fetch-first approach
 - **Conflict resolution** with fallback mechanisms
-- **Commit hash tracking** for change detection
 - **SSH and HTTPS protocol support**
 
 ### 📊 Comprehensive Analysis
@@ -361,9 +575,12 @@ syncx scan ~/Documents/code -d 3
 
 ### 🎨 Beautiful User Experience
 - **Colorized output** with emojis and progress bars
+- **Branch and description display** in `syncx list`
 - **Verbose monitoring** with detailed progress tracking
 - **Dry-run preview** for all operations
 - **Clear error reporting** with actionable messages
+
+---
 
 ## 🔧 Development Commands
 
@@ -384,12 +601,6 @@ make run        # Run locally without installing
 # Build the application
 go build -o syncx main.go
 
-# Build for development with scripts
-./scripts/build.sh
-
-# Install system-wide
-./scripts/install.sh
-
 # Run tests
 go test ./...
 
@@ -400,127 +611,27 @@ go fmt ./...
 go mod download
 ```
 
-## 📁 Project Structure
-
-```
-syncx/
-├── main.go                 # Application entry point
-├── go.mod                 # Go module definition
-├── go.sum                 # Go module checksums
-├── README.md              # Complete usage documentation
-├── CLAUDE.md              # Development guidance for Claude Code
-│
-├── cmd/                   # Cobra CLI commands
-│   ├── root.go            # Root command and global flags
-│   ├── clone.go           # Clone/update repositories with smart tracking
-│   ├── pull.go            # Update existing repositories only
-│   ├── check.go           # Check for uncommitted changes
-│   ├── scan.go            # Scan directories for git repos
-│   ├── list.go            # List projects and groups
-│   └── status.go          # Check repository status
-│
-├── internal/              # Core functionality
-│   ├── types.go           # Data structures and types
-│   ├── logger.go          # Colored logging system
-│   ├── git.go             # Git operations with enhanced tracking
-│   ├── inventory.go       # Inventory file processing with smart analysis
-│   └── tracker.go         # Smart tracking system
-│
-└── scripts/               # Build and utility scripts
-    ├── build.sh           # Build script
-    ├── install.sh         # Installation script
-    └── uninstall.sh       # Uninstall script
-```
-
-## 📂 Directory Structure
-
-When you run `syncx clone` with a base directory (e.g., `~/repos`), all projects are organized under a `projects/` subdirectory:
-
-```
-~/repos/
-├── projects/                    # All repositories go here
-│   ├── frontend/
-│   │   ├── web-app/
-│   │   └── mobile-app/
-│   ├── backend/
-│   │   ├── api-server/
-│   │   └── auth-service/
-│   ├── devops/
-│   │   └── infrastructure/
-│   └── tools/
-│       └── utilities/
-└── .syncx-tracker.json         # Tracking file (auto-generated)
-```
-
-## 📋 Project Inventory Format
-
-The application expects a `projects-inventory.json` file with this structure:
-```json
-{
-  "physical-location": "optional-location",
-  "groups": [
-    {
-      "name": "Frontend",
-      "projects": [
-        {"name": "web-app", "url": "git@github.com:org/web-app.git"},
-        {"name": "mobile-app", "url": "git@github.com:org/mobile-app.git"}
-      ],
-      "groups": [
-        {
-          "name": "Components",
-          "projects": [
-            {"name": "ui-library", "url": "git@github.com:org/ui-library.git"}
-          ]
-        }
-      ]
-    },
-    {
-      "name": "Backend",
-      "projects": [
-        {"name": "api-server", "url": "git@github.com:org/api-server.git"},
-        {"name": "auth-service", "url": "git@github.com:org/auth-service.git"}
-      ]
-    }
-  ],
-  "projects": [
-    {"name": "documentation", "url": "git@github.com:org/docs.git"}
-  ]
-}
-```
+---
 
 ## 🏗️ Architecture
 
-This is a Go CLI application built with the Cobra framework for managing multiple Git repositories. The architecture follows a clean separation of concerns:
+This is a Go CLI application built with the Cobra framework. Architecture follows a clean separation of concerns:
 
-### Core Structure
-- **`main.go`** - Application entry point that delegates to cmd package
-- **`cmd/`** - Cobra CLI commands and command-line interface logic
-  - `root.go` - Root command with global flags and configuration
-  - `clone.go` - Repository cloning and updating functionality
-  - `pull.go` - Pull updates for existing repositories
-  - `check.go` - Check for uncommitted changes
-  - `scan.go` - Scan directories recursively for git repos
-  - `list.go` - Project inventory listing and exploration
-  - `status.go` - Repository health checking
-- **`internal/`** - Core business logic and data structures
-  - `types.go` - Data structures (Project, Group, Inventory, OperationResult)
-  - `git.go` - Git operations (clone, pull, status checking)
-  - `inventory.go` - JSON inventory file processing
-  - `logger.go` - Colored logging and output formatting
-  - `tracker.go` - Smart repository tracking system
-
-### Key Concepts
-- **Inventory System**: Projects are organized in JSON files with hierarchical groups
-- **Protocol Support**: Both SSH and HTTP git protocols
-- **Smart Tracking System**: Tracks repository state and optimizes operations
-- **Parallel Processing**: Configurable concurrent operations for performance
-- **Directory Structure**: Projects organized under `projects/` subdirectory
+- **`cmd/`** — Cobra commands; each file owns one command
+- **`internal/`** — Core business logic, no CLI dependencies
+  - `types.go` — Shared data structures (`Project`, `Group`, `Inventory`, `ProjectInfo`)
+  - `git.go` — All git operations (clone with branch support, pull, status)
+  - `inventory.go` — JSON loading, project collection, filtering
+  - `tracker.go` — Smart state tracking between runs
+  - `logger.go` — Colorized, emoji-rich output
 
 ### Dependencies
-- `github.com/spf13/cobra` - CLI framework
-- `github.com/fatih/color` - Terminal colors
-- `github.com/schollz/progressbar/v3` - Progress bars
-- `github.com/briandowns/spinner` - Loading spinners
+- `github.com/spf13/cobra` — CLI framework
+- `github.com/fatih/color` — Terminal colors
+- `github.com/schollz/progressbar/v3` — Progress bars
+- `github.com/briandowns/spinner` — Loading spinners
+
+---
 
 ## 🧪 Testing and Quality
 
@@ -528,6 +639,8 @@ This is a Go CLI application built with the Cobra framework for managing multipl
 - Use `go fmt ./...` to format code according to Go standards
 - The application includes dry-run mode for safe operation testing
 - Verbose logging available with `--verbose` flag for debugging
+
+---
 
 ## 📄 License
 

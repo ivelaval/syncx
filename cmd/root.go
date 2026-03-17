@@ -82,9 +82,10 @@ func initConfig() {
 func setupGlobals(cmd *cobra.Command) {
 	// Commands that don't require inventory file
 	commandsWithoutInventory := map[string]bool{
-		"scan":    true,
-		"version": true,
-		"help":    true,
+		"scan":          true,
+		"version":       true,
+		"help":          true,
+		"generate-json": true,
 	}
 
 	// Validate protocol

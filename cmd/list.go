@@ -93,7 +93,7 @@ func runList(cmd *cobra.Command, args []string) {
 
 func showGroupsOnly(groups []string, groupMap map[string][]internal.ProjectInfo, logger *internal.Logger) {
 	logger.Header("📁 Groups")
-	
+
 	for _, group := range groups {
 		projects := groupMap[group]
 		color.New(color.FgBlue, color.Bold).Printf("📁 %s", group)
@@ -137,14 +137,18 @@ func showCompactProjects(projects []internal.ProjectInfo) {
 
 func showDetailedProjects(projects []internal.ProjectInfo) {
 	for _, project := range projects {
-		color.New(color.FgGreen, color.Bold).Printf("  📦 %s\n", project.Name)
+		color.New(color.FgGreen, color.Bold).Printf("  📦 %s", project.Name)
+		if project.DefaultBranch != "" {
+			color.New(color.FgYellow, color.Faint).Printf("  [%s]", project.DefaultBranch)
+		}
+		fmt.Println()
+
+		if project.Description != "" {
+			color.New(color.FgWhite, color.Faint).Printf("      💬 %s\n", project.Description)
+		}
 		color.New(color.FgWhite, color.Faint).Printf("      🔗 %s\n", project.URL)
-		
+
 		if verbose {
-			// Show additional details in verbose mode
-			gitURL := internal.FormatGitURL(project.URL, protocol)
-			color.New(color.FgCyan, color.Faint).Printf("      🌐 Git URL: %s\n", gitURL)
-			
 			dirPath := internal.ExtractDirectoryPath(project.URL)
 			if dirPath != "" {
 				color.New(color.FgYellow, color.Faint).Printf("      📂 Path: %s\n", dirPath)

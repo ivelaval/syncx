@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -176,8 +177,9 @@ func IsEmptyRepository(path string) bool {
 	return err != nil
 }
 
-// CloneRepository clones a repository to the specified local path
-func CloneRepository(repoURL, localPath string, logger *Logger) OperationResult {
+// CloneRepository clones a repository to the specified local path.
+// If branch is non-empty, it clones that specific branch.
+func CloneRepository(repoURL, localPath, branch string, logger *Logger) OperationResult {
 	start := time.Now()
 
 	// Create parent directory if it doesn't exist
@@ -193,8 +195,14 @@ func CloneRepository(repoURL, localPath string, logger *Logger) OperationResult 
 
 	logger.Cloning("%s -> %s", repoURL, localPath)
 
-	// Fast clone with timeout (60 seconds) and shallow depth for speed
-	output, err := runGitCommandWithOutputAndTimeout(60*time.Second, "clone", "--depth=1", "--single-branch", "--quiet", repoURL, localPath)
+	// Build clone args: optionally specify branch
+	cloneArgs := []string{"clone", "--depth=1", "--single-branch", "--quiet"}
+	if branch != "" {
+		cloneArgs = append(cloneArgs, "--branch", branch)
+	}
+	cloneArgs = append(cloneArgs, repoURL, localPath)
+
+	output, err := runGitCommandWithOutputAndTimeout(60*time.Second, cloneArgs...)
 	if err != nil {
 		return OperationResult{
 			Success: false,
@@ -342,7 +350,7 @@ func CloneOrUpdateRepository(project ProjectInfo, dryRun bool, logger *Logger) O
 	}
 
 	// Directory doesn't exist, clone the repository
-	result := CloneRepository(project.GitURL, project.LocalPath, logger)
+	result := CloneRepository(project.GitURL, project.LocalPath, project.DefaultBranch, logger)
 	result.Project = project
 	
 	// Update tracker if clone was successful
@@ -581,4 +589,152 @@ func CheckRepositoryChanges(path string) (int, int, int, error) {
 	}
 
 	return modified, staged, untracked, nil
+}
+
+// CheckUnpushedCommits checks if there are commits that haven't been pushed to remote
+// Returns: (number of unpushed commits, error)
+func CheckUnpushedCommits(path string) (int, error) {
+	// First, check if there's a remote configured
+	cmd := exec.Command("git", "-C", path, "remote")
+	output, err := cmd.Output()
+	if err != nil || strings.TrimSpace(string(output)) == "" {
+		// No remote configured
+		return 0, nil
+	}
+
+	// Get current branch
+	branch, err := GetGitBranch(path)
+	if err != nil {
+		return 0, err
+	}
+
+	// Check if branch has upstream
+	cmd = exec.Command("git", "-C", path, "rev-parse", "--abbrev-ref", fmt.Sprintf("%s@{upstream}", branch))
+	_, err = cmd.Output()
+	if err != nil {
+		// No upstream configured
+		return 0, nil
+	}
+
+	// Count commits ahead of remote
+	cmd = exec.Command("git", "-C", path, "rev-list", "--count", fmt.Sprintf("@{upstream}..HEAD"))
+	output, err = cmd.Output()
+	if err != nil {
+		return 0, nil // If error, assume no unpushed commits
+	}
+
+	var count int
+	fmt.Sscanf(strings.TrimSpace(string(output)), "%d", &count)
+	return count, nil
+}
+
+// GetChangeSummary returns a brief summary of changes in a repository
+// Returns a slice of strings describing the changes
+func GetChangeSummary(path string) ([]string, error) {
+	cmd := exec.Command("git", "-C", path, "status", "--porcelain")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	summary := []string{}
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+
+	// Count by type
+	modifiedCount := 0
+	stagedCount := 0
+	untrackedCount := 0
+	deletedCount := 0
+
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		if len(line) < 2 {
+			continue
+		}
+
+		indexStatus := line[0]
+		workTreeStatus := line[1]
+
+		// Check for different types of changes
+		if indexStatus == 'D' || workTreeStatus == 'D' {
+			deletedCount++
+		}
+		if indexStatus != ' ' && indexStatus != '?' {
+			stagedCount++
+		}
+		if workTreeStatus == 'M' {
+			modifiedCount++
+		}
+		if indexStatus == '?' && workTreeStatus == '?' {
+			untrackedCount++
+		}
+	}
+
+	// Build summary
+	if modifiedCount > 0 {
+		summary = append(summary, fmt.Sprintf("%d modified", modifiedCount))
+	}
+	if stagedCount > 0 {
+		summary = append(summary, fmt.Sprintf("%d staged", stagedCount))
+	}
+	if deletedCount > 0 {
+		summary = append(summary, fmt.Sprintf("%d deleted", deletedCount))
+	}
+	if untrackedCount > 0 {
+		summary = append(summary, fmt.Sprintf("%d untracked", untrackedCount))
+	}
+
+	return summary, nil
+}
+
+// DiscoverGitRepositories recursively finds all git repositories in a directory
+func DiscoverGitRepositories(rootDir string, maxDepth int) []string {
+	var repositories []string
+	var mu sync.Mutex
+
+	var walkDir func(path string, depth int)
+	walkDir = func(path string, depth int) {
+		// Stop if we've reached max depth
+		if depth > maxDepth {
+			return
+		}
+
+		// Read directory contents
+		entries, err := os.ReadDir(path)
+		if err != nil {
+			return // Skip directories we can't read
+		}
+
+		// Check if this directory is a git repository
+		gitPath := filepath.Join(path, ".git")
+		if info, err := os.Stat(gitPath); err == nil && info.IsDir() {
+			mu.Lock()
+			repositories = append(repositories, path)
+			mu.Unlock()
+			return // Don't scan inside git repositories
+		}
+
+		// Recursively scan subdirectories
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+
+			// Skip common non-repository directories
+			name := entry.Name()
+			if name == ".git" || name == "node_modules" || name == "vendor" ||
+			   name == ".venv" || name == "venv" || name == "__pycache__" ||
+			   name == ".next" || name == ".nuxt" || name == "dist" || name == "build" {
+				continue
+			}
+
+			subPath := filepath.Join(path, name)
+			walkDir(subPath, depth+1)
+		}
+	}
+
+	walkDir(rootDir, 0)
+	return repositories
 }
