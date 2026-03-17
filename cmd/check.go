@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -105,63 +107,64 @@ func runCheck(cmd *cobra.Command, args []string) {
 	color.New(color.FgCyan).Printf("   Parallel operations: %d\n", checkParallel)
 	fmt.Println()
 
-	// Load tracker to find actually cloned repositories
-	spinnerScan := logger.StartSpinner("Scanning for existing repositories using tracker...")
+	// Try to load tracker first (silently)
 	tracker, err := internal.LoadOrCreateTracker(absDir, file)
-	if err != nil {
-		logger.StopSpinnerWarning(spinnerScan, "Tracker not found, using inventory paths")
 
-		// Fallback: scan using inventory paths
-		var existingProjects []internal.ProjectInfo
+	var existingProjects []internal.ProjectInfo
+
+	if err == nil {
+		// Tracker exists, try to use it
+		spinnerTracker := logger.StartSpinner("Looking for tracked repositories...")
+		trackedCount := 0
+
 		for _, project := range allProjects {
-			if _, err := os.Stat(project.LocalPath); err == nil {
-				if internal.IsGitRepository(project.LocalPath) {
-					existingProjects = append(existingProjects, project)
+			// Find project in tracker by URL
+			for _, trackedProject := range tracker.Projects {
+				if trackedProject.URL == project.URL {
+					// Use the tracked local path (actual location)
+					project.LocalPath = trackedProject.LocalPath
+
+					// Verify it still exists
+					if _, err := os.Stat(project.LocalPath); err == nil {
+						if internal.IsGitRepository(project.LocalPath) {
+							existingProjects = append(existingProjects, project)
+							trackedCount++
+						}
+					}
+					break
 				}
 			}
 		}
 
-		if len(existingProjects) == 0 {
-			logger.Warning("No existing repositories found in %s", absDir)
+		if trackedCount > 0 {
+			logger.StopSpinnerSuccess(spinnerTracker, fmt.Sprintf("Found %d tracked repositories", trackedCount))
+		} else {
+			logger.StopSpinnerWarning(spinnerTracker, "No tracked repositories found")
+		}
+	}
+
+	// If tracker doesn't exist or found no repositories, scan the directory recursively
+	if err != nil || len(existingProjects) == 0 {
+		// Discover all git repositories recursively
+		spinnerScan := logger.StartSpinner("Scanning directory for git repositories...")
+		repositories := internal.DiscoverGitRepositories(absDir, 10) // Use depth 10 like scan command
+		logger.StopSpinnerSuccess(spinnerScan, fmt.Sprintf("Found %d git repositories", len(repositories)))
+
+		if len(repositories) == 0 {
+			logger.Warning("No git repositories found in %s", absDir)
 			logger.Info("💡 Use 'clone' command to download repositories first")
 			return
 		}
 
-		// Process fallback
-		checkResults := processCheckOperations(existingProjects, logger)
-		displayCheckResults(checkResults, logger, time.Since(startTime).String())
-		return
-	}
-
-	// Use tracker to find existing projects
-	var existingProjects []internal.ProjectInfo
-	trackedCount := 0
-
-	for _, project := range allProjects {
-		// Find project in tracker by URL
-		for _, trackedProject := range tracker.Projects {
-			if trackedProject.URL == project.URL {
-				// Use the tracked local path (actual location)
-				project.LocalPath = trackedProject.LocalPath
-
-				// Verify it still exists
-				if _, err := os.Stat(project.LocalPath); err == nil {
-					if internal.IsGitRepository(project.LocalPath) {
-						existingProjects = append(existingProjects, project)
-						trackedCount++
-					}
-				}
-				break
+		// Convert discovered repositories to ProjectInfo
+		existingProjects = make([]internal.ProjectInfo, 0, len(repositories))
+		for _, repoPath := range repositories {
+			projectInfo := internal.ProjectInfo{
+				Name:      filepath.Base(repoPath),
+				LocalPath: repoPath,
 			}
+			existingProjects = append(existingProjects, projectInfo)
 		}
-	}
-
-	logger.StopSpinnerSuccess(spinnerScan, fmt.Sprintf("Found %d tracked repositories", trackedCount))
-
-	if len(existingProjects) == 0 {
-		logger.Warning("No existing repositories found in %s", absDir)
-		logger.Info("💡 Use 'clone' command to download repositories first")
-		return
 	}
 
 	// Process check operations
@@ -175,7 +178,9 @@ type CheckResult struct {
 	ModifiedFiles    int
 	StagedFiles      int
 	UntrackedFiles   int
+	UnpushedCommits  int
 	Branch           string
+	ChangeSummary    []string
 	Error            string
 }
 
@@ -268,117 +273,104 @@ func checkRepositoryChanges(project internal.ProjectInfo) CheckResult {
 	result.UntrackedFiles = untracked
 	result.HasChanges = (modified > 0) || (staged > 0) || (untracked > 0)
 
+	// Check for unpushed commits
+	unpushed, err := internal.CheckUnpushedCommits(project.LocalPath)
+	if err == nil {
+		result.UnpushedCommits = unpushed
+	}
+
+	// Get change summary
+	summary, err := internal.GetChangeSummary(project.LocalPath)
+	if err == nil {
+		result.ChangeSummary = summary
+	}
+
 	return result
 }
 
 func displayCheckResults(results []CheckResult, logger *internal.Logger, duration string) {
-	// Group results
-	var cleanRepos []CheckResult
-	var modifiedRepos []CheckResult
-	var stagedRepos []CheckResult
-	var untrackedRepos []CheckResult
-	var errorRepos []CheckResult
+	// Count statistics
+	total := len(results)
+	withUncommittedChanges := 0
+	withUnpushedCommits := 0
+	var reposWithUncommittedChanges []CheckResult
+	var reposWithUnpushedCommits []CheckResult
 
 	for _, result := range results {
 		if result.Error != "" {
-			errorRepos = append(errorRepos, result)
-		} else if !result.HasChanges {
-			cleanRepos = append(cleanRepos, result)
-		} else {
-			if result.ModifiedFiles > 0 {
-				modifiedRepos = append(modifiedRepos, result)
+			continue
+		}
+
+		// Count repos with uncommitted changes (modified, staged, or untracked files)
+		if result.HasChanges {
+			withUncommittedChanges++
+			reposWithUncommittedChanges = append(reposWithUncommittedChanges, result)
+		}
+
+		// Count repos with unpushed commits
+		if result.UnpushedCommits > 0 {
+			withUnpushedCommits++
+			// Only add to list if not already in uncommitted changes list
+			alreadyListed := false
+			for _, r := range reposWithUncommittedChanges {
+				if r.Project.LocalPath == result.Project.LocalPath {
+					alreadyListed = true
+					break
+				}
 			}
-			if result.StagedFiles > 0 {
-				stagedRepos = append(stagedRepos, result)
-			}
-			if result.UntrackedFiles > 0 {
-				untrackedRepos = append(untrackedRepos, result)
+			if !alreadyListed {
+				reposWithUnpushedCommits = append(reposWithUnpushedCommits, result)
 			}
 		}
 	}
 
 	// Display summary
-	logger.Header("📊 Check Results Summary")
-
-	total := len(results)
-	color.New(color.FgWhite, color.Bold).Printf("Total repositories scanned: %d\n", total)
-	color.New(color.FgCyan).Printf("Duration: %s\n", duration)
+	logger.Header("📊 Repository Summary")
 	fmt.Println()
 
-	if len(cleanRepos) > 0 {
-		color.New(color.FgGreen, color.Bold).Printf("✅ Clean (no changes): %d\n", len(cleanRepos))
-	}
+	color.New(color.FgWhite, color.Bold).Printf("  Total projects: %d\n", total)
+	color.New(color.FgYellow, color.Bold).Printf("  With uncommitted changes: %d\n", withUncommittedChanges)
+	color.New(color.FgBlue, color.Bold).Printf("  With unpushed commits: %d\n", withUnpushedCommits)
+	fmt.Println()
 
-	if len(modifiedRepos) > 0 {
-		color.New(color.FgYellow, color.Bold).Printf("📝 Modified files: %d\n", len(modifiedRepos))
-	}
-
-	if len(stagedRepos) > 0 {
-		color.New(color.FgBlue, color.Bold).Printf("📦 Staged changes: %d\n", len(stagedRepos))
-	}
-
-	if len(untrackedRepos) > 0 {
-		color.New(color.FgMagenta, color.Bold).Printf("❓ Untracked files: %d\n", len(untrackedRepos))
-	}
-
-	if len(errorRepos) > 0 {
-		color.New(color.FgRed, color.Bold).Printf("❌ Errors: %d\n", len(errorRepos))
-	}
-
-	// Show detailed information for repositories with changes
-	if len(modifiedRepos) > 0 {
+	// Show repositories with uncommitted changes
+	if len(reposWithUncommittedChanges) > 0 {
+		logger.Header("📝 Repositories with Uncommitted Changes")
 		fmt.Println()
-		logger.Header("📝 Repositories with Modified Files")
-		for _, result := range modifiedRepos {
-			color.New(color.FgYellow).Printf("  • %s (%s)\n", result.Project.Name, result.Branch)
-			color.New(color.FgWhite).Printf("    Modified: %d", result.ModifiedFiles)
-			if result.StagedFiles > 0 {
-				color.New(color.FgBlue).Printf(" | Staged: %d", result.StagedFiles)
+
+		for _, result := range reposWithUncommittedChanges {
+			// Show path
+			color.New(color.FgYellow, color.Bold).Printf("  %s\n", result.Project.LocalPath)
+
+			// Show summary
+			if len(result.ChangeSummary) > 0 {
+				color.New(color.FgWhite).Printf("    └─ %s", strings.Join(result.ChangeSummary, ", "))
 			}
-			if result.UntrackedFiles > 0 {
-				color.New(color.FgMagenta).Printf(" | Untracked: %d", result.UntrackedFiles)
+
+			// Show unpushed commits if any
+			if result.UnpushedCommits > 0 {
+				color.New(color.FgCyan).Printf(" | %d unpushed commits", result.UnpushedCommits)
 			}
+
 			fmt.Println()
-			if verbose {
-				color.New(color.FgWhite, color.Faint).Printf("    Path: %s\n", result.Project.LocalPath)
-			}
+			fmt.Println()
 		}
 	}
 
-	if len(stagedRepos) > 0 && len(modifiedRepos) == 0 {
+	// Show repositories with unpushed commits (but no uncommitted changes)
+	if len(reposWithUnpushedCommits) > 0 {
+		logger.Header("📤 Repositories with Unpushed Commits")
 		fmt.Println()
-		logger.Header("📦 Repositories with Staged Changes")
-		for _, result := range stagedRepos {
-			if result.ModifiedFiles == 0 { // Only show if not already shown in modified section
-				color.New(color.FgBlue).Printf("  • %s (%s)\n", result.Project.Name, result.Branch)
-				color.New(color.FgWhite).Printf("    Staged: %d", result.StagedFiles)
-				if result.UntrackedFiles > 0 {
-					color.New(color.FgMagenta).Printf(" | Untracked: %d", result.UntrackedFiles)
-				}
-				fmt.Println()
-			}
+
+		for _, result := range reposWithUnpushedCommits {
+			color.New(color.FgBlue, color.Bold).Printf("  %s\n", result.Project.LocalPath)
+			color.New(color.FgWhite).Printf("    └─ %d commits pending push\n", result.UnpushedCommits)
+			fmt.Println()
 		}
 	}
 
-	if len(errorRepos) > 0 {
-		fmt.Println()
-		logger.Header("❌ Repositories with Errors")
-		for _, result := range errorRepos {
-			color.New(color.FgRed).Printf("  • %s: %s\n", result.Project.Name, result.Error)
-		}
-	}
-
-	if len(cleanRepos) > 0 && verbose {
-		fmt.Println()
-		logger.Header("✅ Clean Repositories")
-		for _, result := range cleanRepos {
-			color.New(color.FgGreen).Printf("  • %s (%s)\n", result.Project.Name, result.Branch)
-		}
-	}
-
-	// Show helpful tips
-	if len(modifiedRepos) > 0 || len(stagedRepos) > 0 {
-		fmt.Println()
-		logger.Info("💡 Tip: Review and commit your changes before running sync operations")
+	// Show message if everything is clean
+	if withUncommittedChanges == 0 && withUnpushedCommits == 0 {
+		color.New(color.FgGreen, color.Bold).Printf("\n  ✅ All repositories are clean and synced\n\n")
 	}
 }

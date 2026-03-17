@@ -90,7 +90,7 @@ func runScan(cmd *cobra.Command, args []string) {
 	logger.Header("🔍 Discovering Git Repositories")
 	spinner := logger.StartSpinner("Scanning directory tree...")
 
-	repositories := discoverGitRepositories(absDir, scanMaxDepth)
+	repositories := internal.DiscoverGitRepositories(absDir, scanMaxDepth)
 
 	logger.StopSpinnerSuccess(spinner, fmt.Sprintf("Found %d git repositories", len(repositories)))
 
@@ -105,56 +105,6 @@ func runScan(cmd *cobra.Command, args []string) {
 
 	// Display results
 	displayScanResults(results, logger, time.Since(startTime).String())
-}
-
-// discoverGitRepositories recursively finds all git repositories in a directory
-func discoverGitRepositories(rootDir string, maxDepth int) []string {
-	var repositories []string
-	var mu sync.Mutex
-
-	var walkDir func(path string, depth int)
-	walkDir = func(path string, depth int) {
-		// Stop if we've reached max depth
-		if depth > maxDepth {
-			return
-		}
-
-		// Read directory contents
-		entries, err := os.ReadDir(path)
-		if err != nil {
-			return // Skip directories we can't read
-		}
-
-		// Check if this directory is a git repository
-		gitPath := filepath.Join(path, ".git")
-		if info, err := os.Stat(gitPath); err == nil && info.IsDir() {
-			mu.Lock()
-			repositories = append(repositories, path)
-			mu.Unlock()
-			return // Don't scan inside git repositories
-		}
-
-		// Recursively scan subdirectories
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-
-			// Skip common non-repository directories
-			name := entry.Name()
-			if name == ".git" || name == "node_modules" || name == "vendor" ||
-			   name == ".venv" || name == "venv" || name == "__pycache__" ||
-			   name == ".next" || name == ".nuxt" || name == "dist" || name == "build" {
-				continue
-			}
-
-			subPath := filepath.Join(path, name)
-			walkDir(subPath, depth+1)
-		}
-	}
-
-	walkDir(rootDir, 0)
-	return repositories
 }
 
 // ScanResult represents the result of scanning a repository
